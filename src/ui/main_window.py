@@ -32,6 +32,14 @@ class UIManager:
             agent_coordinator: Pre-initialized agent coordinator (optional).
         """
         self.agent_coordinator = agent_coordinator
+        
+        # Enable high DPI awareness on Windows for better rendering
+        try:
+            from ctypes import windll
+            windll.shcore.SetProcessDpiAwareness(1)
+        except:
+            pass  # Ignore errors on non-Windows platforms or if not available
+        
         self.root = tk.Tk()
         self.status_manager: Optional[StatusManager] = None
         self.error_dialog: Optional[ErrorDialog] = None
@@ -97,7 +105,7 @@ class UIManager:
             question_frame, 
             height=4, 
             wrap=tk.WORD,
-            font=("Consolas", 10)
+            font=("Segoe UI", 10)
         )
         self.question_entry.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N), padx=(0, 10))
         
@@ -190,7 +198,7 @@ class UIManager:
         self.sources_display = scrolledtext.ScrolledText(
             sources_frame,
             wrap=tk.WORD,
-            font=("Consolas", 9),
+            font=("Segoe UI", 9),
             state=tk.DISABLED
         )
         self.sources_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
