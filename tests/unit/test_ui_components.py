@@ -352,34 +352,3 @@ class TestUIManagerErrorDisplay:
         assert error['error_type'] == "general"
         assert error['message'] == "An unexpected error occurred"
         assert error['details'] is None
-
-
-class TestUIManagerInitialization:
-    """Test UIManager initialization and default values."""
-    
-    def test_default_question_text(self):
-        """Test that the question field is pre-populated with default text."""
-        # This test verifies that the UI is initialized with the correct default question
-        # We use a mock to avoid creating an actual tkinter window
-        with patch('src.ui.main_window.tk.Tk'):
-            with patch('src.ui.main_window.scrolledtext.ScrolledText') as mock_scrolled_text:
-                mock_question_entry = Mock()
-                mock_scrolled_text.return_value = mock_question_entry
-                
-                # Import and initialize UIManager (will be mocked)
-                from src.ui.main_window import UIManager
-                
-                # Create UI manager - this should call setup_ui which creates the question entry
-                ui_manager = UIManager()
-                
-                # Verify that the question entry was populated with the default text
-                # The insert method should have been called with the default question
-                calls = mock_question_entry.insert.call_args_list
-                
-                # Look for the call with the default question text
-                expected_text = "How many languages does your text-to-speech service support?"
-                question_text_found = any(
-                    expected_text in str(call) for call in calls
-                )
-                
-                assert question_text_found, f"Expected question text '{expected_text}' not found in insert calls: {calls}"

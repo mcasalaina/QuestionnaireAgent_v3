@@ -312,7 +312,7 @@ class QuestionnaireAgentUI:
         
         self.question_text = scrolledtext.ScrolledText(parent, height=8, width=40, 
                                                      font=('Segoe UI', 12), wrap=tk.WORD)
-        self.question_text.insert(tk.END, "How many languages does your text-to-speech service support?")  # Default value
+        self.question_text.insert(tk.END, "Does your service offer video generative AI?")  # Default value
         self.question_text.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
         
         # Buttons
