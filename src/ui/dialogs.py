@@ -243,18 +243,26 @@ Contact support if the issue continues."""
         button_frame.pack(fill=tk.X)
         
         # Close button
-        close_button = ttk.Button(
+        close_button = tk.Button(
             button_frame,
             text="Close",
-            command=dialog.destroy
+            command=dialog.destroy,
+            bg="lightgray",
+            fg="black",
+            padx=10,
+            pady=5
         )
         close_button.pack(side=tk.RIGHT)
         
         # Copy to clipboard button
-        copy_button = ttk.Button(
+        copy_button = tk.Button(
             button_frame,
             text="Copy Details",
-            command=lambda: self._copy_error_details(message, troubleshooting_text)
+            command=lambda: self._copy_error_details(message, troubleshooting_text),
+            bg="lightgray",
+            fg="black",
+            padx=10,
+            pady=5
         )
         copy_button.pack(side=tk.RIGHT, padx=(0, 10))
         
