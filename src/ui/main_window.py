@@ -61,23 +61,24 @@ class UIManager:
         style = ttk.Style()
         style.theme_use('clam')
         
-        # Create main container
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Create main paned window for left/right split
+        main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        main_paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 0))
         
-        # Configure grid weights
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
+        # Create left panel for input controls
+        left_frame = ttk.Frame(main_paned)
+        main_paned.add(left_frame, weight=1)
         
-        # Create UI sections
-        self._create_question_section(main_frame)
-        self._create_controls_section(main_frame)
-        self._create_results_section(main_frame)
-        self._create_status_section(main_frame)
+        # Create right panel for results
+        right_frame = ttk.Frame(main_paned)
+        main_paned.add(right_frame, weight=2)
+        
+        # Create UI sections in appropriate panels
+        self._create_left_panel(left_frame)
+        self._create_right_panel(right_frame)
         
         # Initialize status manager and error dialog
-        self.status_manager = StatusManager(main_frame)
+        self.status_manager = StatusManager(self.root)
         self.error_dialog = ErrorDialog(self.root)
         
         # Set up event handlers
@@ -85,120 +86,107 @@ class UIManager:
         
         logger.info("GUI initialized successfully")
     
-    def _create_question_section(self, parent: ttk.Frame) -> None:
-        """Create the question input section."""
-        # Question frame
-        question_frame = ttk.LabelFrame(parent, text="Question", padding="10")
-        question_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N), pady=(0, 10))
-        question_frame.columnconfigure(0, weight=1)
+    def _create_left_panel(self, parent: ttk.Frame) -> None:
+        """Create the left panel with input controls."""
+        # Context section
+        context_label = ttk.Label(parent, text="Context")
+        context_label.pack(anchor=tk.W, pady=(0, 5))
         
-        # Question input
-        self.question_entry = scrolledtext.ScrolledText(
-            question_frame, 
-            height=4, 
-            wrap=tk.WORD,
-            font=("Consolas", 10)
-        )
-        self.question_entry.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N), padx=(0, 10))
+        context_entry = ttk.Entry(parent, textvariable=self.context_var, width=40)
+        context_entry.pack(fill=tk.X, pady=(0, 15))
         
-        # Settings frame
-        settings_frame = ttk.Frame(question_frame)
-        settings_frame.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        # Character Limit section
+        limit_label = ttk.Label(parent, text="Character Limit")
+        limit_label.pack(anchor=tk.W, pady=(0, 5))
         
-        # Context setting
-        ttk.Label(settings_frame, text="Context:").grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
-        context_entry = ttk.Entry(settings_frame, textvariable=self.context_var, width=20)
-        context_entry.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
-        
-        # Character limit setting
-        ttk.Label(settings_frame, text="Character Limit:").grid(row=2, column=0, sticky=tk.W, pady=(0, 5))
         char_limit_spinbox = ttk.Spinbox(
-            settings_frame, 
-            from_=100, 
-            to=10000, 
+            parent,
+            from_=100,
+            to=10000,
             textvariable=self.char_limit_var,
-            width=20
+            width=40
         )
-        char_limit_spinbox.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        char_limit_spinbox.pack(fill=tk.X, pady=(0, 15))
         
-        # Max retries setting
-        ttk.Label(settings_frame, text="Max Retries:").grid(row=4, column=0, sticky=tk.W, pady=(0, 5))
+        # Maximum Retries section
+        retries_label = ttk.Label(parent, text="Maximum Retries")
+        retries_label.pack(anchor=tk.W, pady=(0, 5))
+        
         retries_spinbox = ttk.Spinbox(
-            settings_frame, 
-            from_=1, 
-            to=25, 
+            parent,
+            from_=1,
+            to=25,
             textvariable=self.max_retries_var,
-            width=20
+            width=40
         )
-        retries_spinbox.grid(row=5, column=0, sticky=(tk.W, tk.E))
-    
-    def _create_controls_section(self, parent: ttk.Frame) -> None:
-        """Create the control buttons section."""
-        controls_frame = ttk.Frame(parent)
-        controls_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        retries_spinbox.pack(fill=tk.X, pady=(0, 15))
         
-        # Ask button
+        # Question section
+        question_label = ttk.Label(parent, text="Question")
+        question_label.pack(anchor=tk.W, pady=(0, 5))
+        
+        self.question_entry = scrolledtext.ScrolledText(
+            parent,
+            height=8,
+            width=40,
+            font=('Segoe UI', 12),
+            wrap=tk.WORD
+        )
+        self.question_entry.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        # Buttons
+        button_frame = ttk.Frame(parent)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
         self.ask_button = ttk.Button(
-            controls_frame, 
-            text="Ask!", 
-            command=self._on_ask_clicked,
-            style="Accent.TButton"
+            button_frame,
+            text="Ask!",
+            command=self._on_ask_clicked
         )
-        self.ask_button.pack(side=tk.LEFT, padx=(0, 10))
+        self.ask_button.pack(fill=tk.X, pady=(0, 10))
         
-        # Import Excel button
         self.import_button = ttk.Button(
-            controls_frame, 
-            text="Import From Excel", 
+            button_frame,
+            text="Import From Excel",
             command=self._on_import_excel_clicked
         )
-        self.import_button.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Clear button
-        clear_button = ttk.Button(
-            controls_frame, 
-            text="Clear", 
-            command=self._on_clear_clicked
-        )
-        clear_button.pack(side=tk.RIGHT)
+        self.import_button.pack(fill=tk.X)
     
-    def _create_results_section(self, parent: ttk.Frame) -> None:
-        """Create the results display section."""
+    def _create_right_panel(self, parent: ttk.Frame) -> None:
+        """Create the right panel with results display."""
         # Results notebook for tabbed display
         results_notebook = ttk.Notebook(parent)
-        results_notebook.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
-        
-        # Configure row weight for expansion
-        parent.rowconfigure(2, weight=1)
+        results_notebook.pack(fill=tk.BOTH, expand=True)
         
         # Answer tab
         answer_frame = ttk.Frame(results_notebook)
         results_notebook.add(answer_frame, text="Answer")
         
+        answer_label = ttk.Label(answer_frame, text="Answer")
+        answer_label.pack(anchor=tk.W, pady=(5, 5))
+        
         self.answer_display = scrolledtext.ScrolledText(
             answer_frame,
             wrap=tk.WORD,
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 12),
             state=tk.DISABLED
         )
-        self.answer_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.answer_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
         
-        # Sources tab
-        sources_frame = ttk.Frame(results_notebook)
-        results_notebook.add(sources_frame, text="Documentation Links")
+        # Documentation tab
+        docs_frame = ttk.Frame(results_notebook)
+        results_notebook.add(docs_frame, text="Documentation")
+        
+        docs_label = ttk.Label(docs_frame, text="Documentation")
+        docs_label.pack(anchor=tk.W, pady=(5, 5))
         
         self.sources_display = scrolledtext.ScrolledText(
-            sources_frame,
+            docs_frame,
             wrap=tk.WORD,
-            font=("Consolas", 9),
+            font=("Segoe UI", 12),
             state=tk.DISABLED
         )
-        self.sources_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-    
-    def _create_status_section(self, parent: ttk.Frame) -> None:
-        """Create the status and progress section."""
-        # This will be handled by StatusManager
-        pass
+        self.sources_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
     
     def _setup_event_handlers(self) -> None:
         """Set up keyboard and window event handlers."""
