@@ -111,31 +111,14 @@ class UIManager:
         
         logger.info("GUI initialized successfully")
     
-    def _create_question_section(self, parent: ttk.Frame) -> None:
-        """Create the question input section."""
-        # Question frame
-        question_frame = ttk.LabelFrame(parent, text="Question", padding="10")
-        question_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N), pady=(0, 10))
-        question_frame.columnconfigure(0, weight=1)
+    def _create_left_panel(self, parent: ttk.Frame) -> None:
+        """Create the left panel with input controls."""
+        # Context section
+        context_label = ttk.Label(parent, text="Context")
+        context_label.pack(anchor=tk.W, pady=(0, 5))
         
-        # Question input
-        self.question_entry = scrolledtext.ScrolledText(
-            question_frame, 
-            height=4, 
-            wrap=tk.WORD,
-            font=("Segoe UI", 10)
-        )
-        self.question_entry.insert(tk.END, "How many languages does your text-to-speech service support?")
-        self.question_entry.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N), padx=(0, 10))
-        
-        # Settings frame
-        settings_frame = ttk.Frame(question_frame)
-        settings_frame.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        
-        # Context setting
-        ttk.Label(settings_frame, text="Context:").grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
-        context_entry = ttk.Entry(settings_frame, textvariable=self.context_var, width=20)
-        context_entry.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        context_entry = ttk.Entry(parent, textvariable=self.context_var, width=40)
+        context_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Character Limit section
         limit_label = ttk.Label(parent, text="Character Limit")
@@ -174,6 +157,7 @@ class UIManager:
             font=('Segoe UI', 12),
             wrap=tk.WORD
         )
+        self.question_entry.insert(tk.END, "How many languages does your text-to-speech service support?")
         self.question_entry.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
         
         # Buttons
