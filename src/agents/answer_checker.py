@@ -45,6 +45,14 @@ VALIDATION CRITERIA:
 4. Character Limits: Is it within specified limits?
 5. Quality: Is it well-structured and professionally written?
 6. Sources: Are included links relevant and from authoritative sources?
+7. Formatting: Is the answer in PLAIN TEXT with NO markdown formatting?
+
+FORMATTING VALIDATION:
+- REJECT if answer contains **bold**, *italics*, `code blocks`, or # headers
+- REJECT if answer uses bullet points (-), numbered lists (1. 2. 3.), or special markdown
+- REJECT if answer has closing phrases like "Learn more:", "References:", "For more information:", etc.
+- APPROVE only if answer is written in natural prose with complete sentences
+- Answer should end with a period (after prose, before any URLs)
 
 RESPONSE FORMAT:
 You MUST start your response with either "APPROVED:" or "REJECTED:" followed by your reasoning.
@@ -52,17 +60,18 @@ You MUST start your response with either "APPROVED:" or "REJECTED:" followed by 
 If APPROVED: 
 - Explain why the answer meets quality standards
 - Highlight strengths and accuracy of the content
+- Confirm it's in plain text format
 
 If REJECTED:
 - Specify exactly what needs to be improved
-- Be specific about factual errors, missing information, or quality issues
+- Be specific about factual errors, missing information, quality issues, or formatting problems
 - Provide clear guidance for improvement
 
 IMPORTANT:
 - Be thorough but decisive in your evaluation
-- Prioritize accuracy and completeness
-- Reject answers that are incomplete, inaccurate, or poorly structured
-- Only approve answers that truly meet professional standards"""
+- Prioritize accuracy, completeness, and plain text formatting
+- Reject answers that are incomplete, inaccurate, poorly structured, or use markdown
+- Only approve answers that truly meet professional standards AND are in plain text"""
             )
         return self.agent
     
@@ -193,6 +202,14 @@ VALIDATION REQUIREMENTS:
 - Must be accurate, complete, and relevant
 - Should include authoritative sources
 - Must be professionally written
+- MUST be in plain text format with NO markdown formatting
+
+FORMATTING CHECK:
+- Verify answer has NO **bold**, *italics*, `code`, # headers
+- Verify answer has NO bullet points (-), numbered lists (1. 2. 3.)
+- Verify answer has NO closing phrases like "Learn more:", "References:", etc.
+- Verify answer is written as natural prose in complete sentences
+- REJECT if any markdown or special formatting is present
 
 RESPONSE FORMAT:
 Start with either "APPROVED:" or "REJECTED:" followed by your detailed reasoning.
