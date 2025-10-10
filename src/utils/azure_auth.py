@@ -4,7 +4,8 @@ import asyncio
 import logging
 from typing import Optional
 from contextlib import asynccontextmanager
-from azure.identity import DefaultAzureCredential, InteractiveBrowserCredential
+from azure.identity.aio import DefaultAzureCredential
+from azure.identity import InteractiveBrowserCredential
 from azure.core.exceptions import ClientAuthenticationError
 from agent_framework_azure_ai import AzureAIAgentClient
 from .config import config_manager
@@ -34,28 +35,28 @@ class AzureAuthenticator:
         if self._credential is not None:
             return self._credential
         
-        # Try DefaultAzureCredential first (supports multiple auth methods)
+        # Try DefaultAzureCredential first (async version)
         try:
             credential = DefaultAzureCredential()
-            await self._verify_credential(credential)
+            # Don't verify immediately - let it authenticate on first use
             self._credential = credential
-            logger.info("Successfully authenticated using DefaultAzureCredential")
+            logger.info("Using DefaultAzureCredential (async - will authenticate on first use)")
             return credential
-        except ClientAuthenticationError as e:
-            logger.warning(f"DefaultAzureCredential failed: {e}")
+        except Exception as e:
+            logger.warning(f"DefaultAzureCredential creation failed: {e}")
         
-        # Fallback to interactive browser authentication
+        # Fallback to interactive browser authentication (sync version for now)
         try:
             credential = InteractiveBrowserCredential()
-            await self._verify_credential(credential)
+            # Don't verify immediately - this will trigger browser authentication on first use
             self._credential = credential
-            logger.info("Successfully authenticated using InteractiveBrowserCredential")
+            logger.info("Using InteractiveBrowserCredential (will open browser on first use)")
             return credential
-        except ClientAuthenticationError as e:
-            logger.error(f"InteractiveBrowserCredential failed: {e}")
+        except Exception as e:
+            logger.error(f"InteractiveBrowserCredential creation failed: {e}")
             raise AuthenticationError(
-                "All authentication methods failed. Please ensure you are logged in to Azure CLI "
-                "or have valid Azure credentials configured."
+                "Failed to create Azure credentials. Please ensure Azure CLI is installed "
+                "or your environment supports interactive authentication."
             ) from e
     
     async def _verify_credential(self, credential) -> None:
@@ -99,7 +100,8 @@ class AzureAuthenticator:
             
             self._client = AzureAIAgentClient(
                 project_endpoint=config_manager.get_azure_endpoint(),
-                credential=credential
+                model_deployment_name=config_manager.get_model_deployment(),
+                async_credential=credential
             )
             
             logger.info("Azure AI Agent client created successfully")
@@ -174,16 +176,21 @@ async def verify_azure_connectivity() -> bool:
             error_details = "; ".join(validation_result.error_details)
             raise AzureServiceError(f"Configuration validation failed: {error_details}")
         
-        # Test Azure connectivity
+        # Test Azure connectivity - this will trigger authentication if needed
         async with foundry_agent_session() as client:
             # If we get here, authentication and basic connectivity work
             logger.info("Azure AI Foundry connectivity verified successfully")
             return True
             
-    except (AuthenticationError, AzureServiceError):
+    except AuthenticationError:
+        # Re-raise authentication errors as-is
+        raise
+    except AzureServiceError:
+        # Re-raise Azure service errors as-is
         raise
     except Exception as e:
         logger.error(f"Unexpected error during connectivity verification: {e}")
+        # For other errors, treat as connectivity issues
         raise AzureServiceError(f"Failed to verify Azure connectivity: {e}") from e
 
 

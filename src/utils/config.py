@@ -68,7 +68,7 @@ class ConfigurationManager:
         """Load configuration from environment variables."""
         return AppConfig(
             azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", ""),
-            model_deployment=os.getenv("AZURE_OPENAI_MODEL_DEPLOYMENT", "gpt-4.1-mini"),
+            model_deployment=os.getenv("AZURE_OPENAI_MODEL_DEPLOYMENT", "gpt-4.1"),
             bing_connection_id=os.getenv("BING_CONNECTION_ID", ""),
             app_insights_connection=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
             max_retries=int(os.getenv("MAX_RETRIES", "10")),
