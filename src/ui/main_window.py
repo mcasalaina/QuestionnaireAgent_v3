@@ -77,8 +77,12 @@ class UIManager:
         self._create_left_panel(left_frame)
         self._create_right_panel(right_frame)
         
+        # Create status bar container frame
+        status_container = ttk.Frame(self.root)
+        status_container.pack(fill=tk.X, padx=10, pady=(0, 5))
+        
         # Initialize status manager and error dialog
-        self.status_manager = StatusManager(self.root)
+        self.status_manager = StatusManager(status_container)
         self.error_dialog = ErrorDialog(self.root)
         
         # Set up event handlers
