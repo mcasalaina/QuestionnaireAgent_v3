@@ -65,6 +65,19 @@ class UIManager:
         self.root.geometry("1200x800")
         self.root.minsize(800, 600)
         
+        # Maximize window based on OS
+        import platform
+        try:
+            if platform.system() == "Windows":
+                self.root.state('zoomed')  # Windows maximized
+            elif platform.system() == "Linux":
+                self.root.attributes('-zoomed', True)  # Linux maximized
+            elif platform.system() == "Darwin":  # macOS
+                self.root.attributes('-zoomed', True)  # macOS maximized
+        except tk.TclError:
+            # Fallback if maximizing fails - just use the geometry
+            pass
+        
         # Configure style
         style = ttk.Style()
         style.theme_use('clam')
