@@ -99,6 +99,7 @@ class UIManager:
             wrap=tk.WORD,
             font=("Consolas", 10)
         )
+        self.question_entry.insert(tk.END, "How many languages does your text-to-speech service support?")
         self.question_entry.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N), padx=(0, 10))
         
         # Settings frame
