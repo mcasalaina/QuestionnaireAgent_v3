@@ -1,14 +1,32 @@
-requests>=2.28.0
-urllib3>=1.26.0
+# Microsoft Agent Framework (required --pre flag during installation)
+agent-framework-azure-ai
+
+# Azure AI services and authentication
 azure-ai-projects
 azure-identity
 azure-ai-evaluation>=1.0.0
-python-dotenv
+
+# Excel processing
 openpyxl
 pandas
+
+# Web automation for link checking and HTTP requests
 playwright
+requests>=2.28.0
+urllib3>=1.26.0
 aiohttp
+
+# Environment and configuration
+python-dotenv
+
+# Azure monitoring and tracing
 azure-monitor-opentelemetry
 opentelemetry-sdk
 azure-core-tracing-opentelemetry
+
+# Testing
 pytest>=6.0.0
+pytest-asyncio
+
+# Note: Install agent-framework-azure-ai with --pre flag:
+# pip install agent-framework-azure-ai --pre

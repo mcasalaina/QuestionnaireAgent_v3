@@ -1,14 +1,38 @@
-# Environment variables
+# Environment variables and configuration
 .env
+.env.local
+.env.development
+.env.production
 
-# Python cache files
+# Python cache and bytecode
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
 *.pyo
 *.pyd
 .Python
 
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
 # Virtual environment
+.venv/
 venv/
 env/
 ENV/
@@ -18,16 +42,34 @@ ENV/
 .idea/
 *.swp
 *.swo
+*.code-workspace
 
 # OS files
 .DS_Store
 Thumbs.db
+Desktop.ini
 
-# Test coverage
+# Testing and coverage
 .coverage
 htmlcov/
-
-# Pytest cache
 .pytest_cache/
+.tox/
+
+# Azure and logs
+*.log
+logs/
+
+# Excel temp files
+~$*.xlsx
+~$*.xls
+*.tmp
+
+# Temporary processing files
+temp_*
+output_*
+processed_*
+
+# Playwright browsers (will be installed on first run)
+playwright-browsers/
 
 .github/
