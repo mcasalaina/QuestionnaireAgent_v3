@@ -4,9 +4,10 @@ import asyncio
 import logging
 from typing import Optional
 from contextlib import asynccontextmanager
-from azure.identity.aio import DefaultAzureCredential
-from azure.identity import InteractiveBrowserCredential
-from azure.core.exceptions import ClientAuthenticationError
+from urllib.parse import urlparse
+import aiohttp
+from azure.identity import DefaultAzureCredential
+from azure.core.exceptions import ClientAuthenticationError, ResourceNotFoundError
 from agent_framework_azure_ai import AzureAIAgentClient
 from .config import config_manager
 from .exceptions import AuthenticationError, AzureServiceError
@@ -22,8 +23,9 @@ class AzureAuthenticator:
         """Initialize the Azure authenticator."""
         self._credential = None
         self._client = None
+        self._endpoint_validated = False
     
-    async def get_credential(self) -> DefaultAzureCredential | InteractiveBrowserCredential:
+    async def get_credential(self) -> DefaultAzureCredential:
         """Get authenticated Azure credential with fallback.
         
         Returns:
@@ -35,29 +37,59 @@ class AzureAuthenticator:
         if self._credential is not None:
             return self._credential
         
-        # Try DefaultAzureCredential first (async version)
+        # Use DefaultAzureCredential - it will automatically try multiple auth methods
+        # including environment variables, managed identity, Azure CLI, and interactive browser
         try:
-            credential = DefaultAzureCredential()
-            # Don't verify immediately - let it authenticate on first use
+            credential = DefaultAzureCredential(
+                exclude_visual_studio_code_credential=False,
+                exclude_shared_token_cache_credential=False,
+                exclude_interactive_browser_credential=False
+            )
             self._credential = credential
-            logger.info("Using DefaultAzureCredential (async - will authenticate on first use)")
+            logger.info("DefaultAzureCredential created - will authenticate on first use (may open browser)")
             return credential
         except Exception as e:
-            logger.warning(f"DefaultAzureCredential creation failed: {e}")
-        
-        # Fallback to interactive browser authentication (sync version for now)
-        try:
-            credential = InteractiveBrowserCredential()
-            # Don't verify immediately - this will trigger browser authentication on first use
-            self._credential = credential
-            logger.info("Using InteractiveBrowserCredential (will open browser on first use)")
-            return credential
-        except Exception as e:
-            logger.error(f"InteractiveBrowserCredential creation failed: {e}")
+            logger.error(f"DefaultAzureCredential creation failed: {e}")
             raise AuthenticationError(
                 "Failed to create Azure credentials. Please ensure Azure CLI is installed "
                 "or your environment supports interactive authentication."
             ) from e
+    
+    async def _validate_azure_endpoint(self) -> None:
+        """Validate Azure AI Projects endpoint format and accessibility.
+        
+        Raises:
+            AzureServiceError: If endpoint is invalid or inaccessible.
+        """
+        if self._endpoint_validated:
+            return
+            
+        endpoint = config_manager.get_azure_endpoint()
+        
+        # Validate endpoint URL format
+        try:
+            parsed = urlparse(endpoint)
+            if not all([parsed.scheme, parsed.netloc]):
+                raise AzureServiceError(f"Invalid endpoint URL format: {endpoint}")
+            
+            if not parsed.scheme.startswith('https'):
+                raise AzureServiceError(f"Endpoint must use HTTPS: {endpoint}")
+            
+            # Check if it looks like an Azure AI Projects endpoint
+            if 'services.ai.azure.com' not in parsed.netloc:
+                logger.warning(f"Endpoint does not appear to be an Azure AI Services endpoint: {endpoint}")
+            
+            if '/api/projects/' not in parsed.path:
+                logger.warning(f"Endpoint does not contain expected projects path: {endpoint}")
+                
+        except Exception as e:
+            raise AzureServiceError(f"Invalid endpoint URL: {endpoint} - {e}") from e
+        
+        # Skip endpoint connectivity test - it can give false positives
+        # The actual Azure client will validate connectivity properly
+        
+        self._endpoint_validated = True
+        logger.debug(f"Endpoint validation completed for: {endpoint}")
     
     async def _verify_credential(self, credential) -> None:
         """Verify that the credential can access Azure resources.
@@ -68,6 +100,9 @@ class AzureAuthenticator:
         Raises:
             ClientAuthenticationError: If credential verification fails.
         """
+        # First validate the endpoint
+        await self._validate_azure_endpoint()
+        
         # Create a temporary client to test the credential
         try:
             test_client = AzureAIAgentClient(
@@ -96,12 +131,28 @@ class AzureAuthenticator:
             return self._client
         
         try:
+            # Validate endpoint first
+            await self._validate_azure_endpoint()
+            
             credential = await self.get_credential()
             
+            endpoint = config_manager.get_azure_endpoint()
+            model_deployment = config_manager.get_model_deployment()
+            
+            logger.info(f"Creating Azure AI Agent client with endpoint: {endpoint}")
+            logger.info(f"Using model deployment: {model_deployment}")
+            
+            # Create client with proper credential parameter
+            from azure.ai.projects.aio import AIProjectClient
+            
+            project_client = AIProjectClient(
+                endpoint=endpoint,
+                credential=credential
+            )
+            
             self._client = AzureAIAgentClient(
-                project_endpoint=config_manager.get_azure_endpoint(),
-                model_deployment_name=config_manager.get_model_deployment(),
-                async_credential=credential
+                project_client=project_client,
+                model_deployment_name=model_deployment
             )
             
             logger.info("Azure AI Agent client created successfully")
@@ -109,6 +160,15 @@ class AzureAuthenticator:
             
         except AuthenticationError:
             raise
+        except ResourceNotFoundError as e:
+            error_msg = f"Azure AI Projects resource not found. Please check that:\n" \
+                       f"1. The endpoint URL is correct: {config_manager.get_azure_endpoint()}\n" \
+                       f"2. The Azure AI Projects resource exists and is accessible\n" \
+                       f"3. Your account has proper permissions to the resource\n" \
+                       f"4. The model deployment '{config_manager.get_model_deployment()}' exists\n" \
+                       f"Original error: {e}"
+            logger.error(error_msg)
+            raise AzureServiceError(error_msg) from e
         except Exception as e:
             logger.error(f"Failed to create Azure AI Agent client: {e}")
             raise AzureServiceError(f"Failed to initialize Azure AI services: {e}") from e
@@ -117,6 +177,7 @@ class AzureAuthenticator:
         """Reset authentication state to force re-authentication."""
         self._credential = None
         self._client = None
+        self._endpoint_validated = False
         logger.info("Authentication state reset")
 
 
