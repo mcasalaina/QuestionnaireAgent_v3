@@ -54,7 +54,8 @@ class ConfigurationManager:
             env_file: Path to environment file. Defaults to .env in project root.
         """
         self.env_file = env_file or self._find_env_file()
-        load_dotenv(self.env_file)
+        # Load .env file with override=True to prioritize .env over system environment variables
+        load_dotenv(self.env_file, override=True)
         self.config = self._load_config()
     
     def _find_env_file(self) -> str:

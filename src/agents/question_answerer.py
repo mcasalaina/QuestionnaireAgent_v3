@@ -6,6 +6,7 @@ import asyncio
 from typing import Any, Dict, Optional
 from agent_framework import Executor, handler, WorkflowContext, ChatAgent, ChatMessage, Role
 from agent_framework_azure_ai import AzureAIAgentClient
+from azure.core.exceptions import ResourceNotFoundError
 from utils.data_types import Question, AgentStep, AgentType, StepStatus
 from utils.logger import log_agent_step, create_span
 from utils.exceptions import AgentExecutionError, AzureServiceError
@@ -117,6 +118,43 @@ Remember to stay focused on Azure AI technologies and provide authoritative, hel
                 )
                 
                 logger.info(f"Question Answerer completed successfully in {execution_time:.2f}s")
+                
+            except ResourceNotFoundError as e:
+                execution_time = time.time() - start_time
+                error_message = (
+                    "Azure resource not found. Please check your configuration:\\n"
+                    "- Azure AI Projects endpoint is correct\\n"
+                    "- Model deployment exists and is accessible\\n"
+                    "- Your account has proper permissions\\n"
+                    f"Original error: {str(e)}"
+                )
+                
+                log_agent_step(
+                    "question_answerer",
+                    error_message,
+                    "failed",
+                    execution_time
+                )
+                
+                logger.error(error_message, exc_info=True)
+                
+                # Store error in context
+                error_data = {
+                    "error": AzureServiceError(error_message),
+                    "agent_steps": [
+                        AgentStep(
+                            agent_name=AgentType.QUESTION_ANSWERER,
+                            input_data=question.text if question else "Unknown question",
+                            output_data="",
+                            execution_time=execution_time,
+                            status=StepStatus.FAILURE,
+                            error_message=error_message
+                        )
+                    ]
+                }
+                
+                await ctx.send_message(error_data)
+                raise AzureServiceError(error_message) from e
                 
             except Exception as e:
                 execution_time = time.time() - start_time

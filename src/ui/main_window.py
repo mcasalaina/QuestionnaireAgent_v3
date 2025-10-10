@@ -32,6 +32,14 @@ class UIManager:
             agent_coordinator: Pre-initialized agent coordinator (optional).
         """
         self.agent_coordinator = agent_coordinator
+        
+        # Enable high DPI awareness on Windows for better rendering
+        try:
+            from ctypes import windll
+            windll.shcore.SetProcessDpiAwareness(1)
+        except:
+            pass  # Ignore errors on non-Windows platforms or if not available
+        
         self.root = tk.Tk()
         self.status_manager: Optional[StatusManager] = None
         self.error_dialog: Optional[ErrorDialog] = None
@@ -56,6 +64,19 @@ class UIManager:
         self.root.title("Questionnaire Answerer (Microsoft Agent Framework)")
         self.root.geometry("1200x800")
         self.root.minsize(800, 600)
+        
+        # Maximize window based on OS
+        import platform
+        try:
+            if platform.system() == "Windows":
+                self.root.state('zoomed')  # Windows maximized
+            elif platform.system() == "Linux":
+                self.root.attributes('-zoomed', True)  # Linux maximized
+            elif platform.system() == "Darwin":  # macOS
+                self.root.attributes('-zoomed', True)  # macOS maximized
+        except tk.TclError:
+            # Fallback if maximizing fails - just use the geometry
+            pass
         
         # Configure style
         style = ttk.Style()
@@ -86,14 +107,31 @@ class UIManager:
         
         logger.info("GUI initialized successfully")
     
-    def _create_left_panel(self, parent: ttk.Frame) -> None:
-        """Create the left panel with input controls."""
-        # Context section
-        context_label = ttk.Label(parent, text="Context")
-        context_label.pack(anchor=tk.W, pady=(0, 5))
+    def _create_question_section(self, parent: ttk.Frame) -> None:
+        """Create the question input section."""
+        # Question frame
+        question_frame = ttk.LabelFrame(parent, text="Question", padding="10")
+        question_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N), pady=(0, 10))
+        question_frame.columnconfigure(0, weight=1)
         
-        context_entry = ttk.Entry(parent, textvariable=self.context_var, width=40)
-        context_entry.pack(fill=tk.X, pady=(0, 15))
+        # Question input
+        self.question_entry = scrolledtext.ScrolledText(
+            question_frame, 
+            height=4, 
+            wrap=tk.WORD,
+            font=("Segoe UI", 10)
+        )
+        self.question_entry.insert(tk.END, "How many languages does your text-to-speech service support?")
+        self.question_entry.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N), padx=(0, 10))
+        
+        # Settings frame
+        settings_frame = ttk.Frame(question_frame)
+        settings_frame.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # Context setting
+        ttk.Label(settings_frame, text="Context:").grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+        context_entry = ttk.Entry(settings_frame, textvariable=self.context_var, width=20)
+        context_entry.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
         # Character Limit section
         limit_label = ttk.Label(parent, text="Character Limit")

@@ -158,7 +158,6 @@ AZURE_AI_FOUNDRY_MODEL_DEPLOYMENT_NAME=your-model-deployment
 BING_CONNECTION_ID=your-bing-connection-id"""
         
         print(f"\n{error_details}")
-        input("\nPress Enter to exit...")
     
     def _show_authentication_error(self, message: str) -> None:
         """Show authentication error to user.
@@ -179,7 +178,6 @@ If using Visual Studio Code, you may also need to:
 - Reload the window after authentication"""
         
         print(f"\n{error_details}")
-        input("\nPress Enter to exit...")
     
     def _show_network_error(self, message: str) -> None:
         """Show network error to user.
@@ -198,7 +196,6 @@ Please check:
 If behind a corporate firewall, contact your IT administrator."""
         
         print(f"\n{error_details}")
-        input("\nPress Enter to exit...")
     
     def _show_azure_service_error(self, message: str) -> None:
         """Show Azure service error to user.
@@ -217,7 +214,6 @@ Please check:
 You can try running in mock mode for testing."""
         
         print(f"\n{error_details}")
-        input("\nPress Enter to exit...")
     
     def _show_general_error(self, message: str) -> None:
         """Show general error to user.
@@ -236,7 +232,6 @@ Please try:
 Check 'questionnaire_agent.log' for detailed error information."""
         
         print(f"\n{error_details}")
-        input("\nPress Enter to exit...")
 
 
 async def main() -> int:
