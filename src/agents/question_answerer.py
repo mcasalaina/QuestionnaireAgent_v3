@@ -47,14 +47,23 @@ REQUIREMENTS:
 - Include specific examples and best practices where helpful
 - Always verify information using web search for the latest details
 
+FORMATTING REQUIREMENTS:
+- Write in PLAIN TEXT ONLY - no markdown, no bold, no italics, no headers
+- Do NOT use **bold**, *italics*, `code blocks`, or # headers
+- Do NOT use bullet points (-), numbered lists (1. 2. 3.), or any special formatting
+- Write in complete sentences as natural prose paragraphs
+- Your answer must end with a period and contain only complete sentences
+- Do NOT include closing phrases like 'Learn more:', 'References:', 'For more information, see:', etc.
+- Put documentation URLs at the end, separated by newlines with no other text
+
 When answering questions:
 1. Search for the most current information
 2. Prioritize official Microsoft documentation
-3. Include practical examples and code snippets when relevant
-4. Provide clear, well-structured explanations
+3. Include practical examples where relevant (in plain text)
+4. Provide clear, well-structured explanations in prose format
 5. Include relevant documentation links at the end
 
-Remember to stay focused on Azure AI technologies and provide authoritative, helpful information."""
+Remember to stay focused on Azure AI technologies and provide authoritative, helpful information in plain text format only."""
             )
         return self.agent
     
@@ -207,7 +216,14 @@ Requirements:
 - Use web search to verify current details
 - Include practical examples where helpful
 
-Please provide a comprehensive answer with supporting documentation links."""
+IMPORTANT - FORMATTING:
+- Write ONLY in plain text with NO markdown formatting
+- NO **bold**, *italics*, `code`, # headers, bullet points, or numbered lists
+- Write as natural prose in complete sentences
+- End answer with a period
+- Place documentation URLs at the end, separated by newlines
+
+Please provide a comprehensive answer in plain text with supporting documentation links."""
 
         return prompt
     
