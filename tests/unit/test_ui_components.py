@@ -2,7 +2,6 @@
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-import tkinter as tk
 from src.utils.data_types import Question, ProcessingResult, Answer, ValidationStatus
 from src.utils.exceptions import AzureServiceError, NetworkError, AuthenticationError
 
@@ -352,3 +351,70 @@ class TestUIManagerErrorDisplay:
         assert error['error_type'] == "general"
         assert error['message'] == "An unexpected error occurred"
         assert error['details'] is None
+
+
+class TestUIManagerDisplayAnswer:
+    """Test UIManager.display_answer functionality."""
+    
+    @pytest.fixture
+    def mock_ui_manager(self):
+        """Create mock UI manager for display_answer testing."""
+        ui_manager = Mock()
+        ui_manager.display_answer = Mock()
+        ui_manager.displayed_answers = []  # Track display calls
+        
+        def track_display(answer_content, sources=None):
+            ui_manager.displayed_answers.append({
+                'answer': answer_content,
+                'sources': sources if sources else []
+            })
+        
+        ui_manager.display_answer.side_effect = track_display
+        return ui_manager
+    
+    def test_display_answer_with_sources(self, mock_ui_manager):
+        """Test displaying answer with documentation sources."""
+        # Arrange
+        answer_text = "Azure AI provides comprehensive AI services."
+        sources = [
+            "https://docs.microsoft.com/azure/ai",
+            "https://learn.microsoft.com/azure/openai"
+        ]
+        
+        # Act
+        mock_ui_manager.display_answer(answer_text, sources)
+        
+        # Assert
+        assert len(mock_ui_manager.displayed_answers) == 1
+        display = mock_ui_manager.displayed_answers[0]
+        assert display['answer'] == answer_text
+        assert len(display['sources']) == 2
+        assert display['sources'] == sources
+    
+    def test_display_answer_without_sources(self, mock_ui_manager):
+        """Test displaying answer without sources shows blank documentation area."""
+        # Arrange
+        answer_text = "Azure AI provides comprehensive AI services."
+        
+        # Act
+        mock_ui_manager.display_answer(answer_text, sources=None)
+        
+        # Assert
+        assert len(mock_ui_manager.displayed_answers) == 1
+        display = mock_ui_manager.displayed_answers[0]
+        assert display['answer'] == answer_text
+        assert display['sources'] == []  # Should be empty, not "No sources provided."
+    
+    def test_display_answer_with_empty_sources_list(self, mock_ui_manager):
+        """Test displaying answer with empty sources list shows blank documentation area."""
+        # Arrange
+        answer_text = "Azure AI provides comprehensive AI services."
+        
+        # Act
+        mock_ui_manager.display_answer(answer_text, sources=[])
+        
+        # Assert
+        assert len(mock_ui_manager.displayed_answers) == 1
+        display = mock_ui_manager.displayed_answers[0]
+        assert display['answer'] == answer_text
+        assert display['sources'] == []  # Should be blank, not show message
