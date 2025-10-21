@@ -486,7 +486,7 @@ class UIManager:
         if sources:
             sources_text = "\n".join(f"• {source}" for source in sources)
         else:
-            sources_text = "No sources provided."
+            sources_text = ""
         
         self.sources_display.config(state=tk.NORMAL)
         self.sources_display.delete("1.0", tk.END)
