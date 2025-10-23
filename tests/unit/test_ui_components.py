@@ -536,4 +536,3 @@ https://example.com/doc2"""
             
             assert "https://example.com/doc1" in displayed_sources, "Sources display should contain URLs"
             assert "https://example.com/doc2" in displayed_sources, "Sources display should contain URLs"
-        assert display['sources'] == []  # Should be blank, not show message

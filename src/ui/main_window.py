@@ -511,7 +511,7 @@ class UIManager:
         import re
         
         # Find all URLs in the content
-        url_pattern = r'https?://[^\s\)]+(?:[^\s\.\,\)\>]*)'
+        url_pattern = r'https?://[^\s]+'
         
         # Split content into lines
         lines = answer_content.split('\n')
