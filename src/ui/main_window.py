@@ -476,13 +476,16 @@ class UIManager:
             answer_content: The answer text to display.
             sources: List of source URLs.
         """
-        # Display answer
+        # Remove URLs from answer content - they should only appear in Documentation tab
+        clean_answer = self._remove_urls_from_answer(answer_content)
+        
+        # Display answer (without URLs)
         self.answer_display.config(state=tk.NORMAL)
         self.answer_display.delete("1.0", tk.END)
-        self.answer_display.insert("1.0", answer_content)
+        self.answer_display.insert("1.0", clean_answer)
         self.answer_display.config(state=tk.DISABLED)
         
-        # Display sources
+        # Display sources in Documentation tab
         if sources:
             sources_text = "\n".join(f"• {source}" for source in sources)
         else:
@@ -492,6 +495,51 @@ class UIManager:
         self.sources_display.delete("1.0", tk.END)
         self.sources_display.insert("1.0", sources_text)
         self.sources_display.config(state=tk.DISABLED)
+    
+    def _remove_urls_from_answer(self, answer_content: str) -> str:
+        """Remove URLs from answer content.
+        
+        Documentation URLs should only appear in the Documentation tab, not in the main answer.
+        This method removes URLs from the end of the answer content.
+        
+        Args:
+            answer_content: The raw answer text that may contain URLs.
+            
+        Returns:
+            Clean answer text without URLs.
+        """
+        import re
+        
+        # Find all URLs in the content
+        url_pattern = r'https?://[^\s\)]+(?:[^\s\.\,\)\>]*)'
+        
+        # Split content into lines
+        lines = answer_content.split('\n')
+        
+        # Find the first line that contains a URL
+        url_start_index = None
+        for i, line in enumerate(lines):
+            if re.search(url_pattern, line.strip()):
+                # Check if this line is mostly/only a URL (not embedded in prose)
+                line_without_urls = re.sub(url_pattern, '', line).strip()
+                # If after removing URLs, the line is empty or just punctuation, it's a URL-only line
+                if not line_without_urls or all(c in '.,;:!? \t' for c in line_without_urls):
+                    url_start_index = i
+                    break
+        
+        # If we found URL-only lines, remove them and any empty lines before them
+        if url_start_index is not None:
+            # Trim trailing empty lines before the URLs
+            while url_start_index > 0 and not lines[url_start_index - 1].strip():
+                url_start_index -= 1
+            
+            # Return content before the URLs
+            clean_content = '\n'.join(lines[:url_start_index]).rstrip()
+            return clean_content
+        
+        # If no URL-only lines found, return original content
+        # (URLs might be embedded in prose, which is acceptable)
+        return answer_content
     
     def display_error(
         self, 
