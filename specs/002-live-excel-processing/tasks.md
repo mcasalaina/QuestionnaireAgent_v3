@@ -1,390 +1,760 @@
-# Task Breakdown: Live Excel Processing Visualization# Implementation Tasks: Live Excel Processing Visualization
+---# Implementation Tasks: Live Excel Processing Visualization
 
-**Feature**: 002-live-excel-processing **Feature**: 002-live-excel-processing
+description: "Task breakdown for Live Excel Processing Visualization"
 
-**Branch**: `002-live-excel-processing` **Date**: October 23, 2025
+---**Feature**: 002-live-excel-processing  
 
-**Date**: October 23, 2025 **Status**: Ready for Implementation
+**Date**: October 23, 2025  
 
-**Status**: Ready for Implementation
+# Tasks: Live Excel Processing Visualization**Status**: Ready for Implementation
 
-## Overview
 
-## Overview
 
-This document breaks down the implementation into discrete, testable tasks organized by user story. Tasks are sequenced to maximize parallel development opportunities while respecting dependencies.
+**Branch**: `002-live-excel-processing`  ## Overview
 
-This document breaks down the Live Excel Processing Visualization feature into concrete, executable tasks organized by user story. Each phase corresponds to a complete, independently testable user story from the specification. Tasks are ordered to enable incremental delivery with P1 stories (foundational functionality) delivered first, followed by P2 stories (enhanced user experience).
+**Input**: Design documents from `/specs/002-live-excel-processing/`  
 
-**Legend**:
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/module_interfaces.mdThis document breaks down the Live Excel Processing Visualization feature into concrete, executable tasks organized by user story. Each phase corresponds to a complete, independently testable user story from the specification. Tasks are ordered to enable incremental delivery with P1 stories (foundational functionality) delivered first, followed by P2 stories (enhanced user experience).
 
-**Total Tasks**: 57 tasks across 10 phases
 
-**Estimated Effort**: High (full-feature implementation) \* **\[P\]** = Parallelizable (can be worked on simultaneously with other \[P\] tasks)
 
-**Testing Strategy**: TDD - Tests written before implementation per constitution \* **\[Story: US#\]** = Maps to user story in spec.md
+**Tests**: This specification does NOT explicitly request TDD or comprehensive testing. Test tasks are included only for critical integration points and new UI components per existing project patterns.**Total Tasks**: 42 tasks across 12 phases
 
-**Parallelization Opportunities**: 23 tasks marked \[P\] for parallel execution\* **Dependencies** = Must complete before starting this task
 
-## Implementation Strategy---
 
-**MVP Scope**: Phase 3 (User Story 1) delivers the minimum viable product - basic spreadsheet rendering in the Answer area. This provides immediate value by showing users what will be processed.## Phase 1: Project Setup & Infrastructure
+**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story. Each user story delivers value independently.**Estimated Effort**: ~44.5 hours
 
-**Incremental Delivery Order**:### T001 - Create Feature Branch and Directory Structure \[P\]
 
-**Setup** (Phase 1): Infrastructure and data types
 
-**Foundational** (Phase 2): Excel loading and core UI framework**Description**: Set up branch and create empty module directories for new code.
+## Format: `[ID] [P?] [Story] Description`**Legend**:
 
-**US1** (Phase 3): View live spreadsheet - Basic visualization
+- **[P]**: Can run in parallel (different files, no dependencies)* **[P]** = Parallelizable (can be worked on simultaneously with other [P] tasks)
 
-**US4** (Phase 4): Multi-sheet processing - Essential for real workbooks**Story**: Foundation for all user stories
+- **[Story]**: Which user story this task belongs to (Setup, Foundation, US1-US7, Polish)* **[Story: US#]** = Maps to user story in spec.md
 
-**US7** (Phase 5): Deferred save - Data integrity guarantee
+- Include exact file paths in descriptions* **Dependencies** = Must complete before starting this task
 
-**US2** (Phase 6): In-progress status - Live feedback**Steps**:
 
-**US3** (Phase 7): Completed answers - Visual confirmation
 
-**US5** (Phase 8): Sheet status indicators - Progress tracking1. Ensure on `002-live-excel-processing` branch (already created)
+## Path Conventions## Implementation Strategy
 
-**US6** (Phase 9): User navigation - User control2. Create empty `src/excel/__init__.py`
+- Single project structure: `src/`, `tests/` at repository root
 
-**Polish** (Phase 10): Cross-cutting concerns3. Verify `src/ui/` directory exists (already present)
+**MVP Scope**: Phase 3 (User Story 1) delivers the minimum viable product - basic spreadsheet rendering in the Answer area. This provides immediate value by showing users what will be processed.
 
-Create empty `tests/unit/` files for new tests
+---
 
-\---5. Create `tests/fixtures/excel/` directory for test files
+**Incremental Delivery Order**:
 
-## Phase 1: Setup & Infrastructure**Acceptance Criteria**:
+## Phase 1: Setup (Shared Infrastructure)* **Setup** (Phase 1): Infrastructure and data types
 
-**Goal**: Establish shared data types, exceptions, and test infrastructure needed by all user stories.\* Directory structure matches plan.md
+* **Foundational** (Phase 2): Excel loading and core UI framework
 
-*   All `__init__.py` files created
+**Purpose**: Project initialization and basic file structure* **US1** (Phase 3): View live spreadsheet - Basic visualization
 
-**Tasks**:\* No import errors when importing new modules
+* **US4** (Phase 4): Multi-sheet processing - Essential for real workbooks
 
-### T001: \[P\] Create data type enums and basic structures**Estimated Time**: 15 minutes
+- [ ] T001 [P] Create `src/excel/__init__.py` module marker* **US7** (Phase 5): Deferred save - Data integrity guarantee
 
-**File**: `src/utils/data_types.py`
+- [ ] T002 [P] Create `src/excel/loader.py` file stub with class skeleton* **US2** (Phase 6): In-progress status - Live feedback
 
-**Description**: Add CellState enum (PENDING, WORKING, COMPLETED) and basic type imports. **Dependencies**: None
+- [ ] T003 [P] Create `src/excel/processor.py` file stub with class skeleton* **US3** (Phase 7): Completed answers - Visual confirmation
+
+- [ ] T004 [P] Create `src/ui/spreadsheet_view.py` file stub with class skeleton* **US5** (Phase 8): Sheet status indicators - Progress tracking
+
+- [ ] T005 [P] Create `src/ui/workbook_view.py` file stub with class skeleton* **US6** (Phase 9): User navigation - User control
+
+- [ ] T006 [P] Create `tests/unit/test_data_types.py` file stub* **Polish** (Phases 10-12): Cross-cutting concerns and finalization
+
+- [ ] T007 [P] Create `tests/unit/test_excel_loader.py` file stub
+
+- [ ] T008 [P] Create `tests/unit/test_ui_components.py` file stub---
+
+- [ ] T009 [P] Create `tests/integration/test_excel_workflow.py` file stub
+
+## Phase 1: Project Setup & Infrastructure
+
+---
+
+**Goal**: Establish shared data types, exceptions, and test infrastructure needed by all user stories.
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+### T001 - Create Feature Branch and Directory Structure [P]
+
+**Purpose**: Core data structures and infrastructure that MUST be complete before ANY user story can be implemented
+
+**Description**: Set up branch and create empty module directories for new code.
+
+**⚠️ CRITICAL**: No user story work can begin until this phase is complete
+
+**Story**: Foundation for all user stories
+
+- [ ] T010 [P] Add `CellState` enum (PENDING, WORKING, COMPLETED) to `src/utils/data_types.py`
+
+- [ ] T011 [P] Add `SheetData` dataclass with fields: sheet_name, sheet_index, questions, answers, cell_states, is_processing, is_complete to `src/utils/data_types.py`**Steps**:
+
+- [ ] T012 [P] Add `WorkbookData` dataclass with fields: file_path, sheets, current_sheet_index, total_questions, completed_questions to `src/utils/data_types.py`1. Ensure on `002-live-excel-processing` branch (already created)
+
+- [ ] T013 [P] Add `NavigationState` dataclass with fields: user_selected_sheet, auto_navigation_enabled to `src/utils/data_types.py`2. Create empty `src/excel/__init__.py`
+
+- [ ] T014 [P] Add `UIUpdateEvent` dataclass with fields: event_type, payload, timestamp to `src/utils/data_types.py`3. Verify `src/ui/` directory exists (already present)
+
+- [ ] T015 [P] Add `ExcelProcessingResult` dataclass to `src/utils/data_types.py` with fields: success, questions_processed, questions_failed, processing_time, output_file_path4. Create empty `tests/unit/` files for new tests
+
+- [ ] T016 [P] Write unit tests for `CellState`, `SheetData`, `WorkbookData`, `NavigationState` in `tests/unit/test_data_types.py`5. Create `tests/fixtures/excel/` directory for test files
+
+- [ ] T017 [P] Implement `ExcelLoader.load_workbook()` method in `src/excel/loader.py` to load Excel files with openpyxl, extract questions from column A (skip header row), skip hidden sheets, return WorkbookData
+
+- [ ] T018 [P] Implement `ExcelLoader.save_workbook()` method in `src/excel/loader.py` to write answers to column B, preserve formatting, handle IOError**Acceptance Criteria**:
+
+- [ ] T019 [P] Write unit tests for `ExcelLoader` in `tests/unit/test_excel_loader.py` using temporary Excel files with single/multi sheets* Directory structure matches plan.md
+
+- [ ] T020 Create thread-safe `UIUpdateQueue` wrapper class around `queue.Queue` in `src/ui/workbook_view.py` or separate utility* All `__init__.py` files created
+
+* No import errors when importing new modules
+
+**Checkpoint**: Foundation ready - user story implementation can now begin in parallel
+
+**Estimated Time**: 15 minutes
+
+---
+
+**Dependencies**: None
+
+## Phase 3: User Story 1 - View Live Spreadsheet in Answer Area (Priority: P1) 🎯 MVP
 
 **Definition of Done**:
+
+**Goal**: When a user imports questions from Excel, they see the spreadsheet rendered in the Answer area with all questions visible in a table format matching the original Excel structure.
 
 CellState enum defined with 3 states---
 
+**Independent Test**: Click "Import From Excel", select a spreadsheet file, verify that the Answer area displays a table showing all questions from the Excel file.
+
 Type hints imported (List, Optional, Dict)
+
+### Implementation for User Story 1
 
 Enum supports string conversion### T002 - Update .github/copilot-instructions.md \[P\]
 
-### T002: \[P\] Create test fixtures directory structure**Description**: Update agent context with new tech stack and structure.
+- [ ] T021 [P] [US1] Implement `SpreadsheetView.__init__()` in `src/ui/spreadsheet_view.py` to initialize with parent widget and SheetData
 
-**File**: `tests/fixtures/excel/`
+- [ ] T022 [P] [US1] Implement `SpreadsheetView.render()` in `src/ui/spreadsheet_view.py` to create ttk.Treeview with columns 'question' and 'response', configure column headers and widths### T002: \[P\] Create test fixtures directory structure**Description**: Update agent context with new tech stack and structure.
 
-**Description**: Create directory structure for test Excel files. **Story**: Foundation
+- [ ] T023 [US1] Implement `SpreadsheetView.render()` row insertion loop in `src/ui/spreadsheet_view.py` to iterate over sheet_data.questions and insert into Treeview with tags for cell states
 
-**Definition of Done**:
+- [ ] T024 [US1] Configure Treeview tags in `SpreadsheetView.render()` in `src/ui/spreadsheet_view.py`: pending (white), working (pink #FFB6C1), completed (light green #90EE90)**File**: `tests/fixtures/excel/`
 
-`tests/fixtures/excel/` directory exists**Steps**:
+- [ ] T025 [US1] Add vertical scrollbar to Treeview in `SpreadsheetView.render()` in `src/ui/spreadsheet_view.py`
 
-README.md explaining fixture naming convention
+- [ ] T026 [P] [US1] Implement `WorkbookView.__init__()` in `src/ui/workbook_view.py` to initialize with parent, workbook_data, ui_update_queue**Description**: Create directory structure for test Excel files. **Story**: Foundation
+
+- [ ] T027 [P] [US1] Implement `WorkbookView.render()` in `src/ui/workbook_view.py` to create ttk.Notebook widget
+
+- [ ] T028 [US1] Implement sheet tab creation loop in `WorkbookView.render()` in `src/ui/workbook_view.py` to create frame per sheet, instantiate SpreadsheetView, add tab with sheet name**Definition of Done**:
+
+- [ ] T029 [US1] Modify `UIManager._on_import_excel_clicked()` in `src/ui/main_window.py` to call ExcelLoader.load_workbook(), create ui_update_queue, call `_show_workbook_view()`
+
+- [ ] T030 [US1] Implement `UIManager._show_workbook_view()` in `src/ui/main_window.py` to hide answer_display, create WorkbookView, render notebook, pack in answer area`tests/fixtures/excel/` directory exists**Steps**:
+
+- [ ] T031 [US1] Update `UIManager._process_excel_internal()` in `src/ui/main_window.py` to use ExcelLoader instead of direct openpyxl calls
+
+- [ ] T032 [P] [US1] Write unit test in `tests/unit/test_ui_components.py` to verify SpreadsheetView creates Treeview with correct columns and tagsREADME.md explaining fixture naming convention
+
+- [ ] T033 [P] [US1] Write unit test in `tests/unit/test_ui_components.py` to verify WorkbookView creates Notebook with correct number of tabs
 
 .gitkeep files to preserve empty directories1. Add "Python 3.11+ + tkinter (GUI), openpyxl (Excel), agent-framework-azure-ai (multi-agent)" to Active Technologies
 
+**Checkpoint**: At this point, importing an Excel file should display the spreadsheet in the Answer area with all questions visible in a table
+
 1.  Add "Excel files (.xlsx) on local filesystem" to Active Technologies
+
+---
 
 ### T003: \[P\] Add Excel-specific exceptions3. Update project structure section with new src/excel/ and src/ui/ files
 
+## Phase 4: User Story 2 - Show In-Progress Status for Active Questions (Priority: P2)
+
 **File**: `src/utils/exceptions.py` 4. Commit changes
+
+**Goal**: As the agent processes each question, the user sees the current question's cell highlighted in pink with a "Working..." indicator.
 
 **Description**: Verify ExcelFormatError exists, add ExcelProcessingError if needed.
 
+**Independent Test**: Start question processing and observe that the currently active cell turns pink and displays "Working..." text.
+
 **Definition of Done**:**Acceptance Criteria**:
+
+### Implementation for User Story 2
 
 ExcelFormatError exception class exists
 
-ExcelProcessingError exception class created\* .github/copilot-instructions.md reflects current architecture
+- [ ] T034 [P] [US2] Implement `SpreadsheetView.update_cell()` method in `src/ui/spreadsheet_view.py` with parameters: row_index, state, answer
 
-Both inherit from appropriate base exception\* No merge conflicts with existing content
+- [ ] T035 [US2] Implement state-to-text logic in `SpreadsheetView._get_response_text()` in `src/ui/spreadsheet_view.py`: WORKING → "Working...", COMPLETED → answer, PENDING → ""ExcelProcessingError exception class created\* .github/copilot-instructions.md reflects current architecture
 
-### T004: \[P\] Create UIUpdateEvent data class**Estimated Time**: 10 minutes
+- [ ] T036 [US2] Update Treeview item in `SpreadsheetView.update_cell()` in `src/ui/spreadsheet_view.py` using treeview.item() with new values and tags
 
-**File**: `src/utils/data_types.py`
+- [ ] T037 [P] [US2] Implement `ExcelProcessor.__init__()` in `src/excel/processor.py` with agent_coordinator and ui_update_queue parametersBoth inherit from appropriate base exception\* No merge conflicts with existing content
 
-**Description**: Define UIUpdateEvent class for thread-safe UI updates. **Dependencies**: None
+- [ ] T038 [P] [US2] Implement `ExcelProcessor._emit_event()` helper method in `src/excel/processor.py` to create UIUpdateEvent and put in queue
 
-**Definition of Done**:
+- [ ] T039 [US2] Implement `ExcelProcessor.process_workbook()` skeleton in `src/excel/processor.py` with async signature, workbook_data parameter, context, char_limit, max_retries### T004: \[P\] Create UIUpdateEvent data class**Estimated Time**: 10 minutes
+
+- [ ] T040 [US2] Implement sheet iteration loop in `ExcelProcessor.process_workbook()` in `src/excel/processor.py` to iterate sheets, mark is_processing=True
+
+- [ ] T041 [US2] Implement question iteration loop in `ExcelProcessor.process_workbook()` in `src/excel/processor.py` to iterate questions in each sheet**File**: `src/utils/data_types.py`
+
+- [ ] T042 [US2] Emit CELL_WORKING event before agent processing in `ExcelProcessor.process_workbook()` in `src/excel/processor.py` with sheet_index and row_index
+
+- [ ] T043 [US2] Update SheetData.cell_states to WORKING in `ExcelProcessor.process_workbook()` in `src/excel/processor.py`**Description**: Define UIUpdateEvent class for thread-safe UI updates. **Dependencies**: None
+
+- [ ] T044 [US2] Call agent_coordinator.process_question() in `ExcelProcessor.process_workbook()` in `src/excel/processor.py`
+
+- [ ] T045 [P] [US2] Write unit test in `tests/unit/test_ui_components.py` to verify update_cell() changes Treeview item background to pink for WORKING state**Definition of Done**:
+
+- [ ] T046 [P] [US2] Write integration test in `tests/integration/test_excel_workflow.py` to verify CELL_WORKING events are emitted correctly with mock agent
 
 UIUpdateEvent dataclass with event\_type, payload, timestamp---
 
+**Checkpoint**: At this point, cells should turn pink with "Working..." when the agent starts processing
+
 Event type constants (SHEET\_START, CELL\_WORKING, etc.)
+
+---
 
 Type hints for all fields## Phase 2: Core Data Structures (Foundational)
 
+## Phase 5: User Story 3 - Display Completed Answers with Visual Confirmation (Priority: P2)
+
 **Checkpoint**: Infrastructure ready for module development### T003 - Implement CellState Enum
+
+**Goal**: When the agent completes answering a question, the response text appears in the corresponding cell and the cell background changes to light green.
 
 \---**Description**: Create enum for cell processing states.
 
+**Independent Test**: Allow the agent to complete at least one question and verify the cell turns light green and contains the generated answer text.
+
 ## Phase 2: Foundational Components (Blocking Prerequisites)**Story**: Foundation for US2, US3
+
+### Implementation for User Story 3
 
 **Goal**: Build core Excel loading, data structures, and base UI framework required by ALL user stories. Nothing can proceed without these.**Steps**:
 
-**Tasks**:1. Open `src/utils/data_types.py`
+- [ ] T047 [US3] Emit CELL_COMPLETED event after agent success in `ExcelProcessor.process_workbook()` in `src/excel/processor.py` with sheet_index, row_index, answer
 
-1.  Add `from enum import Enum` import
+- [ ] T048 [US3] Update SheetData.answers and cell_states to COMPLETED in `ExcelProcessor.process_workbook()` in `src/excel/processor.py`**Tasks**:1. Open `src/utils/data_types.py`
 
-### T005: Create SheetData data class3. Define `CellState` enum with PENDING, WORKING, COMPLETED values
+- [ ] T049 [US3] Increment workbook_data.completed_questions counter in `ExcelProcessor.process_workbook()` in `src/excel/processor.py`
 
-**File**: `src/utils/data_types.py` 4. Add docstring explaining state transitions
+- [ ] T050 [US3] Handle agent failure case in `ExcelProcessor.process_workbook()` in `src/excel/processor.py` to emit CELL_COMPLETED with error message1.  Add `from enum import Enum` import
+
+- [ ] T051 [US3] Implement try-except around agent_coordinator.process_question() in `ExcelProcessor.process_workbook()` in `src/excel/processor.py` to catch exceptions
+
+- [ ] T052 [P] [US3] Implement `WorkbookView._process_event()` method in `src/ui/workbook_view.py` to handle CELL_COMPLETED events### T005: Create SheetData data class3. Define `CellState` enum with PENDING, WORKING, COMPLETED values
+
+- [ ] T053 [US3] In `WorkbookView._process_event()` in `src/ui/workbook_view.py`, call SpreadsheetView.update_cell() with COMPLETED state and answer for CELL_COMPLETED events
+
+- [ ] T054 [P] [US3] Write unit test in `tests/unit/test_ui_components.py` to verify update_cell() changes Treeview item background to light green for COMPLETED state**File**: `src/utils/data_types.py` 4. Add docstring explaining state transitions
+
+- [ ] T055 [P] [US3] Write integration test in `tests/integration/test_excel_workflow.py` to verify CELL_COMPLETED events update UI correctly with mock completed answers
 
 **Description**: Define SheetData class per data-model.md specification.
 
+**Checkpoint**: At this point, completed cells should show light green background with answer text
+
 **Definition of Done**:**Acceptance Criteria**:
+
+---
 
 All fields defined (sheet\_name, sheet\_index, questions, answers, cell\_states, is\_processing, is\_complete)
 
+## Phase 6: User Story 4 - Process All Sheets Sequentially (Priority: P1)
+
 Invariant: len(questions) == len(answers) == len(cell\_states)\* CellState.PENDING.value == "pending"
+
+**Goal**: When an Excel file contains multiple sheets, the agent processes all sheets one by one in order. The system automatically switches the view to show the currently active sheet being processed.
 
 Methods: get\_pending\_questions(), mark\_working(), mark\_completed(), get\_progress()\* CellState.WORKING.value == "working"
 
+**Independent Test**: Import an Excel file with 3 sheets, observe that the agent processes all questions in Sheet 1, then automatically moves to Sheet 2, then Sheet 3, completing all sheets.
+
 Unit test validates invariants\* CellState.COMPLETED.value == "completed"
+
+### Implementation for User Story 4
 
 *   No import errors
 
-### T006: Create WorkbookData data class
+- [ ] T056 [US4] Emit SHEET_START event at beginning of sheet iteration in `ExcelProcessor.process_workbook()` in `src/excel/processor.py`
 
-**File**: `src/utils/data_types.py` **Estimated Time**: 10 minutes
+- [ ] T057 [US4] Emit SHEET_COMPLETE event at end of sheet iteration in `ExcelProcessor.process_workbook()` in `src/excel/processor.py`### T006: Create WorkbookData data class
 
-**Description**: Define WorkbookData class per data-model.md specification.
+- [ ] T058 [US4] Mark sheet.is_processing=False and is_complete=True after sheet completion in `ExcelProcessor.process_workbook()` in `src/excel/processor.py`
 
-**Definition of Done**:**Dependencies**: T001
+- [ ] T059 [US4] Emit WORKBOOK_COMPLETE event after all sheets processed in `ExcelProcessor.process_workbook()` in `src/excel/processor.py`**File**: `src/utils/data_types.py` **Estimated Time**: 10 minutes
+
+- [ ] T060 [US4] Implement SHEET_START event handling in `WorkbookView._process_event()` in `src/ui/workbook_view.py` to call navigate_to_sheet()
+
+- [ ] T061 [US4] Implement `WorkbookView.navigate_to_sheet()` method in `src/ui/workbook_view.py` to check auto_navigation_enabled and call notebook.select()**Description**: Define WorkbookData class per data-model.md specification.
+
+- [ ] T062 [US4] Log auto-navigation actions in `WorkbookView.navigate_to_sheet()` in `src/ui/workbook_view.py`
+
+- [ ] T063 [US4] Call ExcelLoader.save_workbook() in `UIManager._process_excel_internal()` in `src/ui/main_window.py` after process_workbook() completes successfully**Definition of Done**:**Dependencies**: T001
+
+- [ ] T064 [P] [US4] Write integration test in `tests/integration/test_excel_workflow.py` to verify multi-sheet processing with mock workbook containing 3 sheets
 
 All fields defined (file\_path, sheets, current\_sheet\_index, total\_questions, completed\_questions)
 
+**Checkpoint**: At this point, all sheets in a workbook should be processed sequentially with auto-navigation between sheets
+
 Methods: get\_active\_sheet(), advance\_to\_next\_sheet(), get\_overall\_progress(), is\_complete()---
+
+---
 
 Unit test validates sheet progression logic
 
+## Phase 7: User Story 5 - Visual Sheet Status Indicators (Priority: P2)
+
 ### T004 - Implement SheetData Dataclass
+
+**Goal**: Sheet tabs display visual indicators showing the processing status of each sheet. The currently active sheet being processed shows a spinning spinner icon.
 
 ### T007: Create NavigationState class
 
+**Independent Test**: Import a multi-sheet Excel file and observe that the current sheet's tab displays a spinner icon while processing.
+
 **File**: `src/utils/data_types.py` **Description**: Create dataclass for single sheet representation.
+
+### Implementation for User Story 5
 
 **Description**: Define NavigationState class for tracking user tab selection.
 
-**Definition of Done**:**Story**: Foundation for US1, US4
+- [ ] T065 [P] [US5] Define SPINNER_CHAR constant in `WorkbookView` class in `src/ui/workbook_view.py` (Unicode ⟳ U+27F3)
 
-Fields: user\_selected\_sheet (Optional\[int\]), auto\_navigation\_enabled (bool)
+- [ ] T066 [P] [US5] Implement `WorkbookView.update_tab_indicator()` method in `src/ui/workbook_view.py` with sheet_index and is_processing parameters**Definition of Done**:**Story**: Foundation for US1, US4
 
-Methods: lock\_to\_sheet(), enable\_auto\_navigation(), should\_navigate\_to()**Steps**:
+- [ ] T067 [US5] In `update_tab_indicator()` in `src/ui/workbook_view.py`, get sheet_name from workbook_data.sheets[sheet_index]
+
+- [ ] T068 [US5] In `update_tab_indicator()` in `src/ui/workbook_view.py`, set tab text to "{sheet_name} ⟳" if is_processing, else "{sheet_name}"Fields: user\_selected\_sheet (Optional\[int\]), auto\_navigation\_enabled (bool)
+
+- [ ] T069 [US5] Call `update_tab_indicator(sheet_idx, True)` in SHEET_START handler in `WorkbookView._process_event()` in `src/ui/workbook_view.py`
+
+- [ ] T070 [US5] Implement SHEET_COMPLETE event handling in `WorkbookView._process_event()` in `src/ui/workbook_view.py` to call update_tab_indicator(sheet_idx, False)Methods: lock\_to\_sheet(), enable\_auto\_navigation(), should\_navigate\_to()**Steps**:
+
+- [ ] T071 [P] [US5] Write unit test in `tests/unit/test_ui_components.py` to verify update_tab_indicator() changes tab text correctly with spinner
 
 Unit test validates navigation lock behavior
 
+**Checkpoint**: At this point, sheet tabs should display spinner icons for the currently processing sheet
+
 1.  Add SheetData dataclass to `src/utils/data_types.py`
+
+---
 
 ### T008: \[P\] Write unit tests for data types2. Include fields: sheet\_name, sheet\_index, questions, answers, cell\_states, is\_processing, is\_complete
 
+## Phase 8: User Story 6 - Respect User Sheet Navigation (Priority: P2)
+
 **File**: `tests/unit/test_data_types.py` 3. Add `__post_init__` validation for list length invariants
+
+**Goal**: When a user manually clicks on a sheet tab to view a different sheet, the view remains on that user-selected sheet even as the agent continues processing other sheets.
 
 **Description**: Test all data type classes, state transitions, and invariants. 4. Implement `get_progress()` method returning completion percentage
 
+**Independent Test**: Start processing on a 3-sheet file, wait for Sheet 1 to complete and Sheet 2 to start, then click on Sheet 1's tab and verify the view stays on Sheet 1 even as Sheet 2 processing continues.
+
 **Definition of Done**:
+
+### Implementation for User Story 6
 
 Tests for CellState transitions**Acceptance Criteria**:
 
-Tests for SheetData operations and invariants
+- [ ] T072 [P] [US6] Bind `<<NotebookTabChanged>>` event in `WorkbookView.render()` in `src/ui/workbook_view.py` to handle_user_tab_click method
 
-Tests for WorkbookData progression\* All fields defined with correct types
+- [ ] T073 [P] [US6] Implement `WorkbookView.handle_user_tab_click()` method in `src/ui/workbook_view.py` to get selected tab indexTests for SheetData operations and invariants
 
-Tests for NavigationState lock/unlock\* Invariant validation raises AssertionError if lists differ in length
+- [ ] T074 [US6] Call `navigation_state.lock_to_sheet(selected_index)` in `handle_user_tab_click()` in `src/ui/workbook_view.py`
+
+- [ ] T075 [US6] Log user navigation lock in `handle_user_tab_click()` in `src/ui/workbook_view.py`Tests for WorkbookData progression\* All fields defined with correct types
+
+- [ ] T076 [US6] Check `navigation_state.auto_navigation_enabled` at start of `navigate_to_sheet()` in `src/ui/workbook_view.py`, return early if False
+
+- [ ] T077 [P] [US6] Write unit test in `tests/unit/test_ui_components.py` to verify handle_user_tab_click() locks navigationTests for NavigationState lock/unlock\* Invariant validation raises AssertionError if lists differ in length
+
+- [ ] T078 [P] [US6] Write integration test in `tests/integration/test_excel_workflow.py` to verify view remains on user-selected sheet during processing
 
 100% coverage of data type logic\* get\_progress() returns 0.0 for empty sheet, 1.0 for all completed
 
+**Checkpoint**: At this point, user-selected sheet tabs should remain locked even as processing continues on other sheets
+
 *   Dataclass can be instantiated successfully
+
+---
 
 ### T009: Create ExcelLoader class skeleton
 
+## Phase 9: User Story 7 - Preserve Deferred Save Behavior (Priority: P1)
+
 **File**: `src/excel/loader.py` **Estimated Time**: 30 minutes
+
+**Goal**: The Excel file is only saved to disk once all sheets and all questions have been processed and answered, not incrementally as each answer or sheet completes.
 
 **Description**: Create ExcelLoader class with method signatures per contracts.
 
+**Independent Test**: Process an Excel file with multiple sheets, check the file system timestamp during processing, and verify it only changes after all sheets are completed.
+
 **Definition of Done**:**Dependencies**: T003
+
+### Implementation for User Story 7
 
 Class defined with **init**
 
-load\_workbook() method signature---
+- [ ] T079 [US7] Verify ExcelLoader.save_workbook() is ONLY called after ExcelProcessor.process_workbook() returns in `UIManager._process_excel_internal()` in `src/ui/main_window.py`
 
-save\_workbook() method signature
+- [ ] T080 [US7] Add conditional check in `UIManager._process_excel_internal()` in `src/ui/main_window.py` to only save if result.success is Trueload\_workbook() method signature---
+
+- [ ] T081 [US7] Log "Workbook processing complete, saving file..." before save in `UIManager._process_excel_internal()` in `src/ui/main_window.py`
+
+- [ ] T082 [US7] Log "Workbook saved to {file_path}" after save in `UIManager._process_excel_internal()` in `src/ui/main_window.py`save\_workbook() method signature
+
+- [ ] T083 [P] [US7] Write integration test in `tests/integration/test_excel_workflow.py` to verify file timestamp unchanged during processing, updated only after completion
 
 Docstrings from module\_interfaces.md### T005 - Implement WorkbookData Dataclass
 
+**Checkpoint**: At this point, Excel files should only be saved once after all processing completes
+
 ### T010: \[P\] Create test Excel fixtures**Description**: Create dataclass for entire workbook.
+
+---
 
 **File**: `tests/fixtures/excel/`
 
+## Phase 10: Polish & Cross-Cutting Concerns
+
 **Description**: Create test Excel files for various scenarios. **Story**: Foundation for US1, US4, US7
+
+**Purpose**: Improvements that affect multiple user stories
 
 **Definition of Done**:
 
-`single_sheet_5_questions.xlsx`: 1 sheet, 5 questions in column A**Steps**:
+- [ ] T084 [P] [Polish] Implement `WorkbookView.start_update_polling()` method in `src/ui/workbook_view.py` to call _poll_queue()
 
-`multi_sheet_3x10_questions.xlsx`: 3 sheets, 10 questions each
+- [ ] T085 [P] [Polish] Implement `WorkbookView._poll_queue()` method in `src/ui/workbook_view.py` to get events from ui_update_queue in try-except-finally`single_sheet_5_questions.xlsx`: 1 sheet, 5 questions in column A**Steps**:
 
-`hidden_sheets.xlsx`: 2 visible sheets, 1 hidden sheet1. Add WorkbookData dataclass to `src/utils/data_types.py`
+- [ ] T086 [Polish] Schedule next poll with `parent.after(POLL_INTERVAL_MS, _poll_queue)` in `WorkbookView._poll_queue()` in `src/ui/workbook_view.py`
 
-`invalid_format.xlsx`: Corrupted/invalid Excel file2. Include fields: file\_path, sheets, current\_sheet\_index
+- [ ] T087 [Polish] Call `workbook_view.start_update_polling()` in `UIManager._show_workbook_view()` in `src/ui/main_window.py``multi_sheet_3x10_questions.xlsx`: 3 sheets, 10 questions each
 
-All fixtures documented in fixtures README3. Add properties: total\_questions, completed\_questions
+- [ ] T088 [P] [Polish] Implement CELL_WORKING event handling in `WorkbookView._process_event()` in `src/ui/workbook_view.py`
 
-1.  Implement `get_active_sheet()` method
+- [ ] T089 [P] [Polish] Add error logging for invalid sheet_index or row_index in `SpreadsheetView.update_cell()` in `src/ui/spreadsheet_view.py``hidden_sheets.xlsx`: 2 visible sheets, 1 hidden sheet1. Add WorkbookData dataclass to `src/utils/data_types.py`
 
-### T011: Implement ExcelLoader.load\_workbook()
+- [ ] T090 [P] [Polish] Implement ERROR event handling in `WorkbookView._process_event()` in `src/ui/workbook_view.py` to log errors
 
-**File**: `src/excel/loader.py` **Acceptance Criteria**:
+- [ ] T091 [P] [Polish] Add docstrings to all public methods in `src/excel/loader.py``invalid_format.xlsx`: Corrupted/invalid Excel file2. Include fields: file\_path, sheets, current\_sheet\_index
 
-**Description**: Load Excel file and create WorkbookData structure.
+- [ ] T092 [P] [Polish] Add docstrings to all public methods in `src/excel/processor.py`
 
-**Definition of Done**:\* All fields defined with correct types
+- [ ] T093 [P] [Polish] Add docstrings to all public methods in `src/ui/spreadsheet_view.py`All fixtures documented in fixtures README3. Add properties: total\_questions, completed\_questions
 
-Opens .xlsx files with openpyxl\* Properties compute correct totals across all sheets
+- [ ] T094 [P] [Polish] Add docstrings to all public methods in `src/ui/workbook_view.py`
 
-Reads all visible sheets (skips hidden via sheet\_state check)\* get\_active\_sheet() returns sheet with is\_processing=True or None
+- [ ] T095 [P] [Polish] Update README.md with Excel import workflow description1.  Implement `get_active_sheet()` method
 
-Extracts questions from column A\* Dataclass can be instantiated with multiple sheets
+- [ ] T096 [Polish] Run ruff check on all modified files and fix linting issues
+
+- [ ] T097 [Polish] Verify quickstart.md instructions still work end-to-end### T011: Implement ExcelLoader.load\_workbook()
+
+
+
+---**File**: `src/excel/loader.py` **Acceptance Criteria**:
+
+
+
+## Dependencies & Execution Order**Description**: Load Excel file and create WorkbookData structure.
+
+
+
+### Phase Dependencies**Definition of Done**:\* All fields defined with correct types
+
+
+
+- **Setup (Phase 1)**: No dependencies - can start immediatelyOpens .xlsx files with openpyxl\* Properties compute correct totals across all sheets
+
+- **Foundational (Phase 2)**: Depends on Setup completion - BLOCKS all user stories
+
+- **User Stories (Phase 3-9)**: All depend on Foundational phase completionReads all visible sheets (skips hidden via sheet\_state check)\* get\_active\_sheet() returns sheet with is\_processing=True or None
+
+  - User stories can then proceed in parallel (if staffed)
+
+  - Or sequentially in priority order: US1 (P1) → US4 (P1) → US7 (P1) → US2 (P2) → US3 (P2) → US5 (P2) → US6 (P2)Extracts questions from column A\* Dataclass can be instantiated with multiple sheets
+
+- **Polish (Phase 10)**: Depends on all desired user stories being complete
 
 Creates WorkbookData with SheetData for each sheet
 
+### User Story Dependencies
+
 Raises ExcelFormatError for invalid files**Estimated Time**: 30 minutes
 
-Unit test with all fixtures
+- **User Story 1 (P1)**: Can start after Foundational - No dependencies on other stories
 
-**Dependencies**: T004
+- **User Story 2 (P2)**: Depends on US1 (needs SpreadsheetView.update_cell())Unit test with all fixtures
 
-### T012: Implement ExcelLoader.save\_workbook()
+- **User Story 3 (P2)**: Depends on US2 (needs CELL_WORKING to be implemented first)
+
+- **User Story 4 (P1)**: Can start after Foundational - No dependencies, but integrates with US1**Dependencies**: T004
+
+- **User Story 5 (P2)**: Depends on US4 (needs SHEET_START/COMPLETE events)
+
+- **User Story 6 (P2)**: Depends on US4 (needs navigation infrastructure from US1 and US4)### T012: Implement ExcelLoader.save\_workbook()
+
+- **User Story 7 (P1)**: Can start after Foundational - No dependencies
 
 **File**: `src/excel/loader.py` ---
 
+### Suggested Implementation Order (MVP First)
+
 **Description**: Save answers back to column B of Excel file.
 
-**Definition of Done**:### T006 - Implement NavigationState Dataclass
+1. **Phase 1: Setup** (T001-T009)
 
-Opens existing workbook
+2. **Phase 2: Foundational** (T010-T020) - CRITICAL BLOCKER**Definition of Done**:### T006 - Implement NavigationState Dataclass
 
-Writes answers to column B for each sheet**Description**: Create dataclass for tracking user sheet navigation.
+3. **Phase 3: User Story 1** (T021-T033) - MVP: View spreadsheet
 
-Preserves all Excel formatting
+4. **Phase 6: User Story 4** (T056-T064) - Extend MVP: Multi-sheet supportOpens existing workbook
 
-Preserves hidden sheets (writes to original workbook)**Story**: US6
+5. **Phase 9: User Story 7** (T079-T083) - Critical: Save behavior
 
-Unit test verifies round-trip (load → modify → save → load)
+6. **Phase 4: User Story 2** (T034-T046) - Visual feedback: Working stateWrites answers to column B for each sheet**Description**: Create dataclass for tracking user sheet navigation.
 
-**Steps**:
+7. **Phase 5: User Story 3** (T047-T055) - Visual feedback: Completed state
 
-### T013: \[P\] Write unit tests for ExcelLoader
+8. **Phase 7: User Story 5** (T065-T071) - Visual indicators: SpinnersPreserves all Excel formatting
 
-**File**: `tests/unit/test_excel_loader.py` 1. Add NavigationState dataclass to `src/utils/data_types.py`
+9. **Phase 8: User Story 6** (T072-T078) - User control: Navigation lock
 
-**Description**: Test Excel loading and saving with all fixtures. 2. Include fields: user\_selected\_sheet (Optional\[int\])
+10. **Phase 10: Polish** (T084-T097) - Final refinementsPreserves hidden sheets (writes to original workbook)**Story**: US6
 
-**Definition of Done**:3. Add property: auto\_navigation\_enabled
 
-Tests load\_workbook() with each fixture4. Implement methods: lock\_to\_sheet(), enable\_auto\_navigation()
 
-Tests save\_workbook() round-trip
+### Within Each User StoryUnit test verifies round-trip (load → modify → save → load)
 
-Tests hidden sheet preservation**Acceptance Criteria**:
+
+
+- Tests (if included) should be written alongside or after implementation (not strict TDD for this feature)**Steps**:
+
+- Data structures before UI components
+
+- UI components before integration### T013: \[P\] Write unit tests for ExcelLoader
+
+- Core implementation before error handling
+
+- Story complete before moving to next priority**File**: `tests/unit/test_excel_loader.py` 1. Add NavigationState dataclass to `src/utils/data_types.py`
+
+
+
+### Parallel Opportunities**Description**: Test Excel loading and saving with all fixtures. 2. Include fields: user\_selected\_sheet (Optional\[int\])
+
+
+
+- All Setup tasks marked [P] can run in parallel (T001-T009)**Definition of Done**:3. Add property: auto\_navigation\_enabled
+
+- All Foundational tasks marked [P] can run in parallel within Phase 2
+
+- Once Foundational phase completes:Tests load\_workbook() with each fixture4. Implement methods: lock\_to\_sheet(), enable\_auto\_navigation()
+
+  - US1, US4, US7 can start in parallel (all P1 priority, independent)
+
+  - After US1 completes: US2, US5 can startTests save\_workbook() round-trip
+
+  - After US2 completes: US3 can start
+
+  - After US4 completes: US6 can startTests hidden sheet preservation**Acceptance Criteria**:
+
+- All Polish tasks marked [P] can run in parallel (T084-T095)
 
 Tests error cases (file not found, invalid format)
 
+---
+
 100% coverage of ExcelLoader\* auto\_navigation\_enabled returns True when user\_selected\_sheet is None
+
+## Parallel Example: Foundational Phase
 
 *   lock\_to\_sheet(idx) sets user\_selected\_sheet
 
-### T014: Create SpreadsheetView class skeleton\* enable\_auto\_navigation() clears user\_selected\_sheet
+```bash
 
-**File**: `src/ui/spreadsheet_view.py` \* State correctly reflects navigation control
+# Launch all data type additions together:### T014: Create SpreadsheetView class skeleton\* enable\_auto\_navigation() clears user\_selected\_sheet
 
-**Description**: Create SpreadsheetView class with method signatures per contracts.
+Task T010: "Add CellState enum to src/utils/data_types.py"
+
+Task T011: "Add SheetData dataclass to src/utils/data_types.py"**File**: `src/ui/spreadsheet_view.py` \* State correctly reflects navigation control
+
+Task T012: "Add WorkbookData dataclass to src/utils/data_types.py"
+
+Task T013: "Add NavigationState dataclass to src/utils/data_types.py"**Description**: Create SpreadsheetView class with method signatures per contracts.
+
+Task T014: "Add UIUpdateEvent dataclass to src/utils/data_types.py"
 
 **Definition of Done**:**Estimated Time**: 20 minutes
 
-Class defined with **init**(parent, sheet\_data)
+# Launch loader and tests in parallel:
 
-Method signatures: render(), update\_cell(), refresh()**Dependencies**: T003
+Task T017: "Implement ExcelLoader.load_workbook() in src/excel/loader.py"Class defined with **init**(parent, sheet\_data)
+
+Task T018: "Implement ExcelLoader.save_workbook() in src/excel/loader.py"
+
+Task T016: "Write unit tests for data types in tests/unit/test_data_types.py"Method signatures: render(), update\_cell(), refresh()**Dependencies**: T003
+
+```
 
 Docstrings from module\_interfaces.md
 
+---
+
 Basic ttk.Treeview creation in render()---
+
+## Parallel Example: User Story 1
 
 ### T015: Create WorkbookView class skeleton### T007 - Implement UIUpdateEvent Dataclass
 
-**File**: `src/ui/workbook_view.py`
+```bash
 
-**Description**: Create WorkbookView class with method signatures per contracts. **Description**: Create dataclass for UI update events from background thread.
+# Launch UI component implementations together:**File**: `src/ui/workbook_view.py`
 
-**Definition of Done**:
+Task T021: "Implement SpreadsheetView.__init__() in src/ui/spreadsheet_view.py"
 
-Class defined with **init**(parent, workbook\_data, ui\_update\_queue)**Story**: Foundation for US2, US3, US4, US5
+Task T026: "Implement WorkbookView.__init__() in src/ui/workbook_view.py"**Description**: Create WorkbookView class with method signatures per contracts. **Description**: Create dataclass for UI update events from background thread.
+
+
+
+# Launch unit tests together after implementation:**Definition of Done**:
+
+Task T032: "Write SpreadsheetView unit test in tests/unit/test_ui_components.py"
+
+Task T033: "Write WorkbookView unit test in tests/unit/test_ui_components.py"Class defined with **init**(parent, workbook\_data, ui\_update\_queue)**Story**: Foundation for US2, US3, US4, US5
+
+```
 
 Method signatures: render(), navigate\_to\_sheet(), update\_tab\_indicator(), start\_update\_polling(), handle\_user\_tab\_click()
 
+---
+
 Docstrings from module\_interfaces.md**Steps**:
+
+## Implementation Strategy
 
 Basic ttk.Notebook creation in render()
 
+### MVP First (User Stories 1, 4, 7 Only)
+
 1.  Add UIUpdateEvent dataclass to `src/utils/data_types.py`
 
-**Checkpoint**: Excel loading and base UI framework complete2. Include fields: event\_type (str), payload (Dict\[str, Any\]), timestamp (float)
+1. Complete Phase 1: Setup (T001-T009)
 
-1.  Add default\_factory for timestamp using time.time()
+2. Complete Phase 2: Foundational (T010-T020) - CRITICAL**Checkpoint**: Excel loading and base UI framework complete2. Include fields: event\_type (str), payload (Dict\[str, Any\]), timestamp (float)
 
-\---4. Document event types in docstring: SHEET\_START, CELL\_WORKING, CELL\_COMPLETED, SHEET\_COMPLETE, WORKBOOK\_COMPLETE, ERROR
+3. Complete Phase 3: User Story 1 (T021-T033) - View spreadsheet
+
+4. Complete Phase 6: User Story 4 (T056-T064) - Multi-sheet processing1.  Add default\_factory for timestamp using time.time()
+
+5. Complete Phase 9: User Story 7 (T079-T083) - Save behavior
+
+6. **STOP and VALIDATE**: Test multi-sheet Excel import and processing\---4. Document event types in docstring: SHEET\_START, CELL\_WORKING, CELL\_COMPLETED, SHEET\_COMPLETE, WORKBOOK\_COMPLETE, ERROR
+
+7. Deploy/demo if ready
 
 ## Phase 3: User Story 1 - View Live Spreadsheet in Answer Area (P1)**Acceptance Criteria**:
 
+### Incremental Delivery
+
 **Story**: When a user imports questions from Excel, they see the spreadsheet rendered in the Answer area with all questions visible in a table format.\* Dataclass can be instantiated with any event\_type and payload
 
-*   Timestamp automatically populated on creation
+1. Complete Setup + Foundational → Foundation ready
 
-**Independent Test**: Click "Import From Excel", select a file, verify Answer area displays table with all questions.\* Docstring lists all event types
+2. Add User Story 1 → Test independently → Spreadsheet visible (MVP!)*   Timestamp automatically populated on creation
 
-**Tasks**:**Estimated Time**: 20 minutes
+3. Add User Story 4 → Test independently → Multi-sheet support
+
+4. Add User Story 7 → Test independently → Correct save behavior**Independent Test**: Click "Import From Excel", select a file, verify Answer area displays table with all questions.\* Docstring lists all event types
+
+5. Add User Stories 2+3 → Test independently → Visual feedback (pink/green)
+
+6. Add User Stories 5+6 → Test independently → Tab indicators and navigation**Tasks**:**Estimated Time**: 20 minutes
+
+7. Polish phase → Final refinements
 
 ### T016: \[P\] Write test for SpreadsheetView rendering**Dependencies**: T003
 
+### Parallel Team Strategy
+
 **File**: `tests/unit/test_ui_components.py`
+
+With multiple developers:
 
 **Story**: \[US1\] ---
 
-**Description**: Test SpreadsheetView creates Treeview with correct columns and rows.
+1. Team completes Setup + Foundational together (T001-T020)
 
-**Definition of Done**:### T008 - Create Unit Tests for Data Types \[P\]
+2. Once Foundational is done:**Description**: Test SpreadsheetView creates Treeview with correct columns and rows.
 
-Test creates SpreadsheetView with test SheetData
+   - Developer A: User Story 1 (T021-T033)
 
-Verifies Treeview has 2 columns (Question, Response)**Description**: Write comprehensive unit tests for all new data structures.
+   - Developer B: User Story 4 (T056-T064) - can start immediately**Definition of Done**:### T008 - Create Unit Tests for Data Types \[P\]
 
-Verifies row count matches SheetData.questions length
+   - Developer C: User Story 7 (T079-T083) - can start immediately
 
-Verifies all questions appear in correct order**Story**: Foundation
+3. After US1 completes:Test creates SpreadsheetView with test SheetData
+
+   - Developer A moves to: User Story 2 (T034-T046)
+
+4. After US2 completes:Verifies Treeview has 2 columns (Question, Response)**Description**: Write comprehensive unit tests for all new data structures.
+
+   - Developer A moves to: User Story 3 (T047-T055)
+
+5. After US4 completes:Verifies row count matches SheetData.questions length
+
+   - Developer B moves to: User Story 5 (T065-T071)
+
+   - Developer C moves to: User Story 6 (T072-T078)Verifies all questions appear in correct order**Story**: Foundation
+
+6. All converge on Polish phase (T084-T097)
 
 ### T017: Implement SpreadsheetView.render()**Steps**:
 
+---
+
 **File**: `src/ui/spreadsheet_view.py`
+
+## Notes
 
 **Story**: \[US1\] 1. Create `tests/unit/test_data_types.py`
 
-**Description**: Create and configure Treeview widget to display sheet as table. 2. Test CellState enum values
+- [P] tasks = different files, no dependencies
 
-**Definition of Done**:3. Test SheetData creation, validation, and get\_progress()
+- [Story] label maps task to specific user story for traceability**Description**: Create and configure Treeview widget to display sheet as table. 2. Test CellState enum values
 
-Creates ttk.Treeview with columns=('Question', 'Response')4. Test WorkbookData properties and get\_active\_sheet()
+- Each user story should be independently completable and testable
 
-Configures column headings and widths5. Test NavigationState state transitions
+- Commit after each task or logical group**Definition of Done**:3. Test SheetData creation, validation, and get\_progress()
 
-Hides tree column (show="tree headings")6. Test UIUpdateEvent creation with timestamp
+- Stop at any checkpoint to validate story independently
+
+- All file paths are absolute from repository rootCreates ttk.Treeview with columns=('Question', 'Response')4. Test WorkbookData properties and get\_active\_sheet()
+
+- Tests are included for new components and critical integration points
+
+- Follow existing patterns from `src/ui/main_window.py` and `src/agents/workflow_manager.py`Configures column headings and widths5. Test NavigationState state transitions
+
+- Use openpyxl for Excel operations (already in requirements.txt)
+
+- Use tkinter.ttk for UI components (standard library)Hides tree column (show="tree headings")6. Test UIUpdateEvent creation with timestamp
+
+- Ensure all UI updates occur on main thread via `root.after()`
 
 Adds vertical scrollbar
 
