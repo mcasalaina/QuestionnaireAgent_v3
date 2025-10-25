@@ -94,23 +94,28 @@ Remember to stay focused on Azure AI technologies and provide authoritative, hel
                 
                 # Run the agent to get the answer
                 response = await agent.run(messages)
-                answer_content = response.text
+                raw_answer_with_urls = response.text
                 
                 execution_time = time.time() - start_time
                 
                 # Extract sources from the answer
-                sources = self._extract_sources(answer_content)
+                sources = self._extract_sources(raw_answer_with_urls)
+                
+                # Separate URLs from answer content - Answer Checker should check clean answer
+                clean_answer = self._remove_urls_from_answer(raw_answer_with_urls)
                 
                 # Store result in context for next agent
+                # raw_answer is the clean answer without URLs (for Answer Checker)
+                # answer_sources contains the extracted URLs (for Link Checker)
                 result_data = {
                     "question": question,
-                    "raw_answer": answer_content,
+                    "raw_answer": clean_answer,
                     "answer_sources": sources,
                     "agent_steps": [
                         AgentStep(
                             agent_name=AgentType.QUESTION_ANSWERER,
                             input_data=question.text,
-                            output_data=answer_content,
+                            output_data=clean_answer,
                             execution_time=execution_time,
                             status=StepStatus.SUCCESS
                         )
@@ -252,6 +257,54 @@ Please provide a comprehensive answer in plain text with supporting documentatio
         
         logger.debug(f"Extracted {len(cleaned_urls)} sources from answer")
         return cleaned_urls
+    
+    def _remove_urls_from_answer(self, answer_content: str) -> str:
+        """Remove URLs from answer content.
+        
+        This separates documentation URLs from the answer prose so that:
+        - Answer Checker validates the clean answer text
+        - Link Checker validates the extracted URLs
+        - UI displays answer and documentation separately
+        
+        Args:
+            answer_content: The raw answer text that may contain URLs at the end.
+            
+        Returns:
+            Clean answer text without trailing URLs.
+        """
+        import re
+        
+        # URL pattern for detection
+        url_pattern = r'https?://[^\s]+'
+        
+        # Split content into lines
+        lines = answer_content.split('\n')
+        
+        # Find the first line that contains only a URL (not embedded in prose)
+        url_start_index = None
+        for i, line in enumerate(lines):
+            if re.search(url_pattern, line.strip()):
+                # Check if this line is mostly/only a URL (not embedded in prose)
+                line_without_urls = re.sub(url_pattern, '', line).strip()
+                # If after removing URLs, the line is empty or just punctuation, it's a URL-only line
+                if not line_without_urls or all(c in '.,;:!? \t' for c in line_without_urls):
+                    url_start_index = i
+                    break
+        
+        # If we found URL-only lines, remove them and any empty lines before them
+        if url_start_index is not None:
+            # Trim trailing empty lines before the URLs
+            while url_start_index > 0 and not lines[url_start_index - 1].strip():
+                url_start_index -= 1
+            
+            # Return content before the URLs
+            clean_content = '\n'.join(lines[:url_start_index]).rstrip()
+            logger.debug(f"Removed URLs from answer: {len(answer_content)} -> {len(clean_content)} chars")
+            return clean_content
+        
+        # If no URL-only lines found, return original content
+        # (URLs might be embedded in prose, which is acceptable)
+        return answer_content
     
     async def cleanup(self) -> None:
         """Clean up resources used by the executor."""
