@@ -335,12 +335,7 @@ class UIManager:
     
     def _on_window_close(self) -> None:
         """Handle window close event."""
-        if self.processing_active:
-            if not messagebox.askokcancel("Processing Active", 
-                                        "Processing is currently active. Are you sure you want to exit?"):
-                return
-        
-        # Cleanup and close
+        # Always cleanup and close without confirmation, even during processing
         self._cleanup()
         self.root.destroy()
     

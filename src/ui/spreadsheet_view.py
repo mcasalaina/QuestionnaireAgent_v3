@@ -56,6 +56,35 @@ class SpreadsheetView:
         self.treeview.column('question', width=400, minwidth=200, anchor='w')
         self.treeview.column('response', width=600, minwidth=300, anchor='w')
         
+        # Configure row height to accommodate multi-line text better
+        style = ttk.Style()
+        style.configure("Treeview", rowheight=60)  # Increase row height from default ~20 to 60
+        
+        # Configure borders and styling - use a combination of approaches
+        style.configure("Treeview", 
+                       background="white",
+                       fieldbackground="white",
+                       selectbackground="#e6f3ff",
+                       selectforeground="black")
+        
+        # Configure header styling with visible borders
+        style.configure("Treeview.Heading",
+                       background="#f0f0f0",
+                       foreground="black",
+                       relief="solid",
+                       borderwidth=1)
+        
+        # Map different states for better visual separation
+        style.map("Treeview",
+                 background=[('selected', '#e6f3ff')],
+                 foreground=[('selected', 'black')])
+        
+        # Configure Treeview to show lines between items
+        self.treeview.configure(show='tree headings')  # Show both tree lines and headings
+        
+        # Re-configure to show headings only but with better styling
+        self.treeview.configure(show='headings')
+        
         # Configure cell state tags for styling
         self._configure_cell_tags()
         
@@ -83,14 +112,27 @@ class SpreadsheetView:
     
     def _configure_cell_tags(self) -> None:
         """Configure Treeview tags for different cell states."""
+        # Configure cell state colors with alternating backgrounds for better separation
         self.treeview.tag_configure('pending', background=self.COLOR_PENDING)
         self.treeview.tag_configure('working', background=self.COLOR_WORKING)
         self.treeview.tag_configure('completed', background=self.COLOR_COMPLETED)
         
-        # Additional styling
-        self.treeview.tag_configure('pending', foreground='#000000')
-        self.treeview.tag_configure('working', foreground='#000000')
-        self.treeview.tag_configure('completed', foreground='#000000')
+        # Add alternating row colors for better visual separation
+        self.treeview.tag_configure('odd_row', background='#f9f9f9')
+        self.treeview.tag_configure('even_row', background='#ffffff')
+        
+        # Working state variants with alternating backgrounds
+        self.treeview.tag_configure('working_odd', background='#FFB6C1')  # Pink
+        self.treeview.tag_configure('working_even', background='#FFC0CB')  # Light pink
+        
+        # Completed state variants with alternating backgrounds  
+        self.treeview.tag_configure('completed_odd', background='#90EE90')  # Light green
+        self.treeview.tag_configure('completed_even', background='#98FB98')  # Pale green
+        
+        # Text color for all states
+        for tag in ['pending', 'working', 'completed', 'odd_row', 'even_row', 
+                   'working_odd', 'working_even', 'completed_odd', 'completed_even']:
+            self.treeview.tag_configure(tag, foreground='#000000')
     
     def _add_scrollbars(self, frame: ttk.Frame) -> None:
         """Add vertical and horizontal scrollbars to the treeview."""
@@ -110,8 +152,17 @@ class SpreadsheetView:
             state = self.sheet_data.cell_states[row_idx]
             answer = self.sheet_data.answers[row_idx]
             
-            response_text = self._get_response_text(state, answer)
-            tag = state.value
+            response_text = self._get_response_text(state, answer or "")
+            
+            # Use alternating row colors with state-specific variants
+            is_odd = (row_idx % 2) == 1
+            
+            if state == CellState.WORKING:
+                tag = 'working_odd' if is_odd else 'working_even'
+            elif state == CellState.COMPLETED:
+                tag = 'completed_odd' if is_odd else 'completed_even'
+            else:  # PENDING
+                tag = 'odd_row' if is_odd else 'even_row'
             
             row_id = self.treeview.insert(
                 '',
@@ -121,7 +172,7 @@ class SpreadsheetView:
             )
             self.row_ids.append(row_id)
         
-        logger.debug(f"Populated {len(self.row_ids)} rows in treeview")
+        logger.debug(f"Populated {len(self.row_ids)} rows in treeview with alternating colors")
     
     def update_cell(
         self, 
@@ -148,11 +199,21 @@ class SpreadsheetView:
         question = self.sheet_data.questions[row_index]
         response_text = self._get_response_text(state, answer or "")
         
+        # Use alternating row colors with state-specific variants
+        is_odd = (row_index % 2) == 1
+        
+        if state == CellState.WORKING:
+            tag = 'working_odd' if is_odd else 'working_even'
+        elif state == CellState.COMPLETED:
+            tag = 'completed_odd' if is_odd else 'completed_even'
+        else:  # PENDING
+            tag = 'odd_row' if is_odd else 'even_row'
+        
         # Update the treeview item
         self.treeview.item(
             row_id,
             values=(question, response_text),
-            tags=(state.value,)
+            tags=(tag,)
         )
         
         # Update sheet data to stay in sync
@@ -164,7 +225,7 @@ class SpreadsheetView:
         if state == CellState.WORKING:
             self._auto_scroll_to_row(row_index)
         
-        logger.debug(f"Updated cell [{row_index}] to {state.value}")
+        logger.debug(f"Updated cell [{row_index}] to {state.value} with alternating color")
     
     def _get_response_text(self, state: CellState, answer: str) -> str:
         """Get display text for response cell based on state.
