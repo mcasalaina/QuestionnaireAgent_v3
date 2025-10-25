@@ -24,7 +24,17 @@ if __name__ == "__main__":
         app = UIManager()
         print("Running application...")
         app.run()
+    except KeyboardInterrupt:
+        print("Application interrupted by user")
     except Exception as e:
         print(f"Error: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        # Ensure the global asyncio runner is shutdown
+        try:
+            from utils.asyncio_runner import shutdown_asyncio_runner
+            shutdown_asyncio_runner()
+            print("Global asyncio runner shutdown completed")
+        except Exception as e:
+            print(f"Warning: Error shutting down asyncio runner: {e}")

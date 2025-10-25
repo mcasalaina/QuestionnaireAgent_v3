@@ -14,6 +14,7 @@ from utils.exceptions import (
 )
 from utils.logger import setup_logging
 from utils.ui_queue import UIUpdateQueue
+from utils.asyncio_runner import get_asyncio_runner, shutdown_asyncio_runner
 from excel.loader import ExcelLoader
 # Import ExcelProcessor lazily to avoid slow agent framework imports
 # from excel.processor import ExcelProcessor
@@ -52,6 +53,9 @@ class UIManager:
         self.error_dialog: Optional[ErrorDialog] = None
         self.processing_active = False
         
+        # Asyncio thread runner for proper event loop management
+        self.asyncio_runner = get_asyncio_runner()
+        
         # UI components
         self.question_entry: Optional[scrolledtext.ScrolledText] = None
         self.ask_button: Optional[ttk.Button] = None
@@ -64,6 +68,7 @@ class UIManager:
         self.workbook_view: Optional[WorkbookView] = None
         self.ui_update_queue: Optional[UIUpdateQueue] = None
         self.current_workbook_data: Optional[WorkbookData] = None
+        self._temp_workbook_data: Optional[WorkbookData] = None
         
         # Settings
         self.char_limit_var = tk.IntVar(value=2000)
@@ -194,12 +199,12 @@ class UIManager:
     def _create_right_panel(self, parent: ttk.Frame) -> None:
         """Create the right panel with results display."""
         # Results notebook for tabbed display
-        results_notebook = ttk.Notebook(parent)
-        results_notebook.pack(fill=tk.BOTH, expand=True)
+        self.results_notebook = ttk.Notebook(parent)
+        self.results_notebook.pack(fill=tk.BOTH, expand=True)
         
         # Answer tab
-        answer_frame = ttk.Frame(results_notebook)
-        results_notebook.add(answer_frame, text="Answer")
+        answer_frame = ttk.Frame(self.results_notebook)
+        self.results_notebook.add(answer_frame, text="Answer")
         
         answer_label = ttk.Label(answer_frame, text="Answer")
         answer_label.pack(anchor=tk.W, pady=(5, 5))
@@ -213,8 +218,8 @@ class UIManager:
         self.answer_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
         
         # Documentation tab
-        docs_frame = ttk.Frame(results_notebook)
-        results_notebook.add(docs_frame, text="Documentation")
+        docs_frame = ttk.Frame(self.results_notebook)
+        self.results_notebook.add(docs_frame, text="Documentation")
         
         docs_label = ttk.Label(docs_frame, text="Documentation")
         docs_label.pack(anchor=tk.W, pady=(5, 5))
@@ -228,8 +233,8 @@ class UIManager:
         self.sources_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
         
         # Reasoning tab
-        reasoning_frame = ttk.Frame(results_notebook)
-        results_notebook.add(reasoning_frame, text="Reasoning")
+        reasoning_frame = ttk.Frame(self.results_notebook)
+        self.results_notebook.add(reasoning_frame, text="Reasoning")
         
         reasoning_label = ttk.Label(reasoning_frame, text="Agent Reasoning")
         reasoning_label.pack(anchor=tk.W, pady=(5, 5))
@@ -302,15 +307,17 @@ class UIManager:
         )
         
         if file_path:
-            # Disable UI during processing
-            self._set_processing_state(True)
-            
-            # Start Excel processing in background thread
-            threading.Thread(
-                target=self._process_excel_async,
-                args=(file_path,),
-                daemon=True
-            ).start()
+            # Load and display Excel file immediately on main thread (no threading!)
+            try:
+                self._load_and_display_excel_sync(file_path)
+                
+                # Then start async processing in background
+                self._set_processing_state(True)
+                self._start_async_excel_processing(file_path)
+                
+            except Exception as e:
+                logger.error(f"Error loading Excel file: {e}", exc_info=True)
+                self.display_error("excel_load_error", f"Failed to load Excel file: {str(e)}")
     
     def _on_clear_clicked(self) -> None:
         """Handle Clear button click."""
@@ -340,27 +347,94 @@ class UIManager:
     def _process_question_async(self, question_text: str) -> None:
         """Process question asynchronously in background thread."""
         try:
-            # Run async processing
-            result = asyncio.run(self._process_question_internal(question_text))
-            
-            # Update UI on main thread
-            self.root.after(0, self._handle_question_result, result)
+            # Use the asyncio thread runner
+            self.asyncio_runner.run_coroutine(
+                self._process_question_internal(question_text),
+                callback=lambda result: self.root.after(0, self._handle_question_result, result),
+                error_callback=lambda e: self.root.after(0, self._handle_processing_error, e)
+            )
             
         except Exception as e:
-            logger.error(f"Error in question processing: {e}", exc_info=True)
+            logger.error(f"Error starting question processing: {e}", exc_info=True)
             # Show error on main thread
             self.root.after(0, self._handle_processing_error, e)
     
     def _process_excel_async(self, file_path: str) -> None:
         """Process Excel file asynchronously in background thread."""
+        def load_excel_on_main_thread():
+            """Load and display Excel file on the main UI thread."""
+            try:
+                self._load_and_display_excel_sync(file_path)
+                
+                # After successful UI load, start async agent processing
+                self.asyncio_runner.run_coroutine(
+                    self._process_excel_agents(file_path),
+                    callback=lambda result: self.root.after(0, self._handle_excel_result, result),
+                    error_callback=self._handle_excel_error
+                )
+                
+            except Exception as e:
+                logger.error(f"Error loading Excel file: {e}", exc_info=True)
+                self._handle_processing_error(e)
+        
+        # Schedule the Excel loading on the main thread
+        self.root.after(0, load_excel_on_main_thread)
+    
+    def _start_async_excel_processing(self, file_path: str) -> None:
+        """Start async Excel processing after UI is loaded."""
+        def run_async():
+            try:
+                self.asyncio_runner.run_coroutine(
+                    self._process_excel_agents(file_path),
+                    callback=lambda result: self.root.after(0, self._handle_excel_result, result),
+                    error_callback=self._handle_excel_error
+                )
+            except Exception as e:
+                logger.error(f"Error starting async Excel processing: {e}", exc_info=True)
+                self.root.after(0, self._handle_processing_error, e)
+        
+        # Run the async processing in a background thread
+        threading.Thread(target=run_async, daemon=True).start()
+    
+    def _load_and_display_excel_sync(self, file_path: str) -> None:
+        """Load Excel file and display it in the UI immediately (synchronous)."""
         try:
-            # Run async processing
-            result = asyncio.run(self._process_excel_internal(file_path))
+            # Clear reasoning display and add initial message
+            self._clear_reasoning_display()
+            self.update_reasoning("Loading Excel file...")
             
-            # Update UI on main thread
-            self.root.after(0, self._handle_excel_result, result)
+            # Load workbook
+            self.status_manager.set_status("Loading Excel file...", "info")
+            self.update_reasoning(f"Loading Excel file: {file_path}")
             
-        except (FileNotFoundError, ExcelFormatError) as e:
+            loader = ExcelLoader()
+            workbook_data = loader.load_workbook(file_path)
+            
+            # Create UI update queue
+            self.ui_update_queue = UIUpdateQueue(maxsize=100)
+            self.update_reasoning(f"Loaded workbook with {len(workbook_data.sheets)} sheets, {workbook_data.total_questions} total questions")
+            
+            # Show workbook immediately
+            self.status_manager.set_status("Creating spreadsheet view...", "info")
+            print(f"DEBUG: About to show workbook view with {len(workbook_data.sheets)} sheets")
+            self._show_workbook_view(workbook_data, self.ui_update_queue)
+            print("DEBUG: _show_workbook_view completed")
+            self.update_reasoning("Spreadsheet view created - you can now see questions in the Answer tab")
+            
+            # Store workbook data for async processing
+            self._temp_workbook_data = workbook_data
+            
+            self.status_manager.set_status("Spreadsheet loaded - initializing agents...", "info")
+            
+        except Exception as e:
+            print(f"DEBUG: Error in _load_and_display_excel_sync: {e}")
+            logger.error(f"Error in _load_and_display_excel_sync: {e}", exc_info=True)
+            self.update_reasoning(f"Error loading Excel file: {e}")
+            raise
+    
+    def _handle_excel_error(self, e: Exception) -> None:
+        """Handle Excel processing errors with proper error result creation."""
+        if isinstance(e, (FileNotFoundError, ExcelFormatError)):
             logger.error(f"Excel file error: {e}")
             # For file/format errors, create error result and handle normally
             error_result = ExcelProcessingResult(
@@ -370,11 +444,7 @@ class UIManager:
                 questions_failed=0
             )
             self.root.after(0, self._handle_excel_result, error_result)
-            
-        except Exception as e:
-            logger.error(f"Error in Excel processing: {e}", exc_info=True)
-            # Show error on main thread
-            self.root.after(0, self._handle_processing_error, e)
+        else:
             logger.error(f"Error in Excel processing: {e}", exc_info=True)
             # Show error on main thread
             self.root.after(0, self._handle_processing_error, e)
@@ -411,33 +481,16 @@ class UIManager:
         # Process with progress updates
         return await self.agent_coordinator.process_question(question, self.update_progress, self.update_reasoning)
     
-    async def _process_excel_internal(self, file_path: str) -> ExcelProcessingResult:
-        """Internal async Excel processing with live UI updates."""
+    async def _process_excel_agents(self, file_path: str) -> ExcelProcessingResult:
+        """Process Excel file with agents (async - UI already loaded)."""
         try:
-            # Clear reasoning display and add initial message
-            self.root.after(0, self._clear_reasoning_display)
-            self.update_reasoning("Starting Excel file processing...")
+            # Get the workbook data that was loaded synchronously
+            workbook_data = self._temp_workbook_data
             
-            # Step 1: Load workbook
-            self.root.after(0, lambda: self.status_manager.set_status("Loading Excel file...", "info"))
-            self.update_reasoning(f"Loading Excel file: {file_path}")
-            loader = ExcelLoader()
-            workbook_data = loader.load_workbook(file_path)
+            self.update_reasoning("Starting agent initialization and question processing...")
             
-            # Step 2: Create UI update queue
-            self.ui_update_queue = UIUpdateQueue(maxsize=100)
-            self.update_reasoning(f"Loaded workbook with {len(workbook_data.sheets)} sheets, {workbook_data.total_questions} total questions")
-            
-            # Step 3: Replace answer_display with WorkbookView on main thread
-            self.root.after(0, lambda: self.status_manager.set_status("Creating spreadsheet view...", "info"))
-            
-            # Show workbook immediately so user can see the questions being processed
-            self.root.after(0, self._show_workbook_view, workbook_data, self.ui_update_queue)
-            self.update_reasoning("Spreadsheet view created - you can now see questions in the Answer tab")
-            
-            # Step 4: Ensure agent coordinator is available
+            # Step 1: Ensure agent coordinator is available
             if not self.agent_coordinator:
-                self.root.after(0, lambda: self.status_manager.set_status("Initializing Azure AI agents... (this takes 30-60 seconds)", "info"))
                 self.update_reasoning("Initializing Azure AI agents... (this may take 30-60 seconds)")
                 
                 # Lazy import to avoid slow startup
@@ -449,8 +502,8 @@ class UIManager:
                 self.agent_coordinator = await create_agent_coordinator(azure_client, bing_connection_id)
                 self.update_reasoning("Azure AI agents initialized successfully")
             
-            # Step 5: Process workbook (import ExcelProcessor lazily)
-            self.root.after(0, lambda: self.status_manager.set_status("Starting question processing...", "info"))
+            # Step 2: Process workbook (import ExcelProcessor lazily)
+            self.update_reasoning("Starting question processing...")
             from excel.processor import ExcelProcessor
             processor = ExcelProcessor(self.agent_coordinator, self.ui_update_queue, self.update_reasoning)
             result = await processor.process_workbook(
@@ -460,10 +513,10 @@ class UIManager:
                 self.max_retries_var.get()
             )
             
-            # Step 6: Save workbook if successful
+            # Step 3: Save workbook if successful
             if result.success:
-                self.root.after(0, lambda: self.status_manager.set_status("Saving results to Excel file...", "info"))
                 self.update_reasoning("Saving results back to Excel file...")
+                loader = ExcelLoader()
                 loader.save_workbook(workbook_data)
                 self.update_reasoning(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
                 logger.info(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
@@ -472,24 +525,6 @@ class UIManager:
             
             return result
             
-        except FileNotFoundError as e:
-            logger.error(f"Excel file not found: {e}")
-            return ExcelProcessingResult(
-                success=False,
-                error_message=f"File not found: {file_path}",
-                questions_processed=0,
-                questions_failed=0
-            )
-        
-        except ExcelFormatError as e:
-            logger.error(f"Excel format error: {e}")
-            return ExcelProcessingResult(
-                success=False,
-                error_message=f"Invalid Excel file format: {str(e)}",
-                questions_processed=0,
-                questions_failed=0
-            )
-        
         except ImportError as e:
             logger.error(f"Import error in Excel processing: {e}", exc_info=True)
             return ExcelProcessingResult(
@@ -540,31 +575,91 @@ class UIManager:
             ui_queue: UI update queue for live updates
         """
         try:
+            print(f"DEBUG: Starting to show workbook view with {len(workbook_data.sheets)} sheets")
+            logger.info(f"Starting to show workbook view with {len(workbook_data.sheets)} sheets")
+            
             # Store current workbook data
             self.current_workbook_data = workbook_data
             
-            # Hide current answer display
-            if self.answer_display:
-                self.answer_display.pack_forget()
+            # Get the answer frame (parent of answer_display)
+            answer_frame = self.answer_display.master if self.answer_display else None
+            print(f"DEBUG: answer_frame = {answer_frame}")
+            print(f"DEBUG: self.answer_display = {self.answer_display}")
             
-            # Create and show WorkbookView
-            parent_frame = self.answer_display.master if self.answer_display else self.root
+            if not answer_frame:
+                print("DEBUG: Could not find answer frame")
+                logger.error("Could not find answer frame")
+                return
+            
+            # COMPLETELY clear and destroy all widgets from the answer frame
+            print(f"DEBUG: Destroying {len(answer_frame.winfo_children())} widgets from answer frame")
+            for widget in answer_frame.winfo_children():
+                print(f"DEBUG: Destroying widget: {widget}")
+                widget.destroy()  # Use destroy() instead of pack_forget()
+            
+            print("DEBUG: All widgets destroyed from answer frame")
+            logger.info("Cleared answer frame contents")
+            
+            # Create and show WorkbookView directly in the answer frame
+            print(f"DEBUG: Creating WorkbookView with parent: {answer_frame}")
+            logger.info(f"Creating WorkbookView with parent: {answer_frame}")
+            
             self.workbook_view = WorkbookView(
-                parent_frame,
+                answer_frame,
                 workbook_data,
                 ui_queue
             )
+            print("DEBUG: WorkbookView created, rendering notebook...")
+            logger.info("WorkbookView created, rendering notebook...")
+            
             notebook = self.workbook_view.render()
+            print(f"DEBUG: Notebook rendered: {notebook}")
+            logger.info(f"Notebook rendered: {notebook}")
+            
+            # Pack the notebook to fill the entire answer frame
             notebook.pack(fill=tk.BOTH, expand=True)
+            print("DEBUG: Notebook packed in answer frame")
+            logger.info("Notebook packed in answer frame")
             
             # Start polling for updates
             self.workbook_view.start_update_polling()
+            print("DEBUG: Update polling started")
+            logger.info("Update polling started")
             
-            logger.info(f"Displayed workbook view with {len(workbook_data.sheets)} sheets")
+            # Force UI update
+            answer_frame.update_idletasks()
+            self.root.update_idletasks()
+            print("DEBUG: UI update forced")
+            
+            # Force switch to Answer tab and verify visibility
+            print(f"DEBUG: Forcing switch to Answer tab")
+            self.results_notebook.select(0)  # Select Answer tab (index 0)
+            print(f"DEBUG: Current tab: {self.results_notebook.index(self.results_notebook.select())}")
+            print(f"DEBUG: Answer frame children after packing: {[str(child) for child in answer_frame.winfo_children()]}")
+            print(f"DEBUG: Notebook children: {[str(child) for child in notebook.winfo_children()]}")
+            
+            # Debug geometry information
+            print(f"DEBUG: Answer frame geometry: {answer_frame.winfo_width()}x{answer_frame.winfo_height()}")
+            print(f"DEBUG: Notebook geometry: {notebook.winfo_width()}x{notebook.winfo_height()}")
+            print(f"DEBUG: Notebook is visible: {notebook.winfo_viewable()}")
+            print(f"DEBUG: Answer frame is visible: {answer_frame.winfo_viewable()}")
+            
+            # Force notebook to be visible and update
+            notebook.lift()
+            notebook.update_idletasks()
+            answer_frame.lift()
+            answer_frame.update_idletasks()
+            self.root.update()
+            
+            print(f"DEBUG: Successfully displayed workbook view with {len(workbook_data.sheets)} sheets")
+            logger.info(f"Successfully displayed workbook view with {len(workbook_data.sheets)} sheets")
             
         except Exception as e:
+            print(f"DEBUG: Error showing workbook view: {e}")
             logger.error(f"Error showing workbook view: {e}", exc_info=True)
             self.display_error("ui_error", f"Failed to display Excel file: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def _restore_answer_display(self) -> None:
         """Restore the original answer display after Excel processing."""
@@ -829,9 +924,26 @@ class UIManager:
         """Clean up resources before closing."""
         if self.agent_coordinator:
             try:
-                asyncio.run(self.agent_coordinator.cleanup_agents())
+                # Use the asyncio runner for cleanup
+                def cleanup_complete():
+                    logger.info("Agent cleanup completed")
+                
+                def cleanup_error(e):
+                    logger.warning(f"Error during agent cleanup: {e}")
+                
+                self.asyncio_runner.run_coroutine(
+                    self.agent_coordinator.cleanup_agents(),
+                    callback=lambda _: cleanup_complete(),
+                    error_callback=cleanup_error
+                )
             except Exception as e:
                 logger.warning(f"Error during cleanup: {e}")
+        
+        # Shutdown the asyncio runner
+        try:
+            self.asyncio_runner.shutdown()
+        except Exception as e:
+            logger.warning(f"Error shutting down asyncio runner: {e}")
     
     def run(self) -> None:
         """Start the GUI event loop."""
