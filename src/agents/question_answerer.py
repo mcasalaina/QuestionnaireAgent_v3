@@ -77,8 +77,15 @@ Remember to stay focused on Azure AI technologies and provide authoritative, hel
         """
         start_time = time.time()
         
+        logger.info(f"🤖 QUESTION ANSWERER AGENT CALLED")
+        logger.info(f"📋 Input Question: '{question.text}'")
+        logger.info(f"🎯 Context: {question.context}")
+        logger.info(f"📏 Character Limit: {question.char_limit}")
+        logger.info(f"🔄 Max Retries: {question.max_retries}")
+        
         with create_span("question_answerer_execution", question_text=question.text):
             try:
+                logger.info(f"🚀 Question Answerer starting: '{question.text[:100]}...'")
                 log_agent_step(
                     "question_answerer",
                     f"Starting question analysis: '{question.text[:50]}...'",
@@ -86,20 +93,31 @@ Remember to stay focused on Azure AI technologies and provide authoritative, hel
                 )
                 
                 # Get the agent
+                logger.info("🔧 Getting Question Answerer agent instance...")
                 agent = await self._get_agent()
+                logger.info("✅ Question Answerer agent retrieved successfully")
                 
                 # Create the question message with context
                 question_prompt = self._build_question_prompt(question)
                 messages = [ChatMessage(role=Role.USER, text=question_prompt)]
+                logger.info(f"📝 Built question prompt ({len(question_prompt)} chars), sending to agent...")
+                logger.info(f"💬 Prompt preview: {question_prompt[:200]}...")
                 
                 # Run the agent to get the answer
+                logger.info("🎯 Calling agent.run() to get answer...")
                 response = await agent.run(messages)
                 answer_content = response.text
+                logger.info(f"📄 Agent returned response ({len(answer_content)} chars)")
+                logger.info(f"🔍 Answer preview: {answer_content[:150]}...")
                 
                 execution_time = time.time() - start_time
                 
                 # Extract sources from the answer
                 sources = self._extract_sources(answer_content)
+                logger.info(f"🔗 Extracted {len(sources)} sources from answer")
+                if sources:
+                    for i, source in enumerate(sources[:3]):  # Show first 3 sources
+                        logger.info(f"   Source {i+1}: {source}")
                 
                 # Store result in context for next agent
                 result_data = {
@@ -118,6 +136,9 @@ Remember to stay focused on Azure AI technologies and provide authoritative, hel
                 }
                 
                 await ctx.send_message(result_data)
+                
+                logger.info(f"📤 Question Answerer sending result data to next agent: {list(result_data.keys())}")
+                logger.info(f"✅ Question Answerer completed successfully in {execution_time:.2f}s")
                 
                 log_agent_step(
                     "question_answerer",

@@ -4,19 +4,26 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, filedialog
 import threading
 import asyncio
+import queue
 from typing import Optional, Callable, Any
 import logging
-from utils.data_types import Question, ProcessingResult, ExcelProcessingResult
+from utils.data_types import Question, ProcessingResult, ExcelProcessingResult, WorkbookData
 from utils.exceptions import (
     AzureServiceError, NetworkError, AuthenticationError, 
     ConfigurationError, ExcelFormatError
 )
 from utils.logger import setup_logging
-from agents.workflow_manager import AgentCoordinator
+from utils.ui_queue import UIUpdateQueue
+from excel.loader import ExcelLoader
+# Import ExcelProcessor lazily to avoid slow agent framework imports
+# from excel.processor import ExcelProcessor
+# Import AgentCoordinator lazily to avoid slow startup
+# from agents.workflow_manager import AgentCoordinator
 from utils.config import config_manager
-from utils.azure_auth import get_azure_client
+# Lazy import: from utils.azure_auth import get_azure_client
 from .status_manager import StatusManager
 from .dialogs import ErrorDialog
+from .workbook_view import WorkbookView
 
 
 logger = logging.getLogger(__name__)
@@ -25,7 +32,7 @@ logger = logging.getLogger(__name__)
 class UIManager:
     """Main GUI interface for the questionnaire application."""
     
-    def __init__(self, agent_coordinator: Optional[AgentCoordinator] = None):
+    def __init__(self, agent_coordinator = None):
         """Initialize UI with agent coordinator dependency.
         
         Args:
@@ -51,6 +58,12 @@ class UIManager:
         self.import_button: Optional[ttk.Button] = None
         self.answer_display: Optional[scrolledtext.ScrolledText] = None
         self.sources_display: Optional[scrolledtext.ScrolledText] = None
+        self.reasoning_display: Optional[scrolledtext.ScrolledText] = None
+        
+        # Excel processing components
+        self.workbook_view: Optional[WorkbookView] = None
+        self.ui_update_queue: Optional[UIUpdateQueue] = None
+        self.current_workbook_data: Optional[WorkbookData] = None
         
         # Settings
         self.char_limit_var = tk.IntVar(value=2000)
@@ -213,6 +226,22 @@ class UIManager:
             state=tk.DISABLED
         )
         self.sources_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
+        
+        # Reasoning tab
+        reasoning_frame = ttk.Frame(results_notebook)
+        results_notebook.add(reasoning_frame, text="Reasoning")
+        
+        reasoning_label = ttk.Label(reasoning_frame, text="Agent Reasoning")
+        reasoning_label.pack(anchor=tk.W, pady=(5, 5))
+        
+        self.reasoning_display = scrolledtext.ScrolledText(
+            reasoning_frame,
+            wrap=tk.WORD,
+            font=("Consolas", 10),  # Monospace font for technical output
+            state=tk.DISABLED,
+            bg="#f8f8f8"  # Light gray background
+        )
+        self.reasoning_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
     
     def _setup_event_handlers(self) -> None:
         """Set up keyboard and window event handlers."""
@@ -243,6 +272,10 @@ class UIManager:
             messagebox.showwarning("Empty Question", "Please enter a question before clicking Ask!")
             self.question_entry.focus()
             return
+        
+        # Clear reasoning display
+        self._clear_reasoning_display()
+        self.update_reasoning(f"Starting single question processing: '{question_text[:100]}...'")
         
         # Disable UI during processing
         self._set_processing_state(True)
@@ -327,20 +360,43 @@ class UIManager:
             # Update UI on main thread
             self.root.after(0, self._handle_excel_result, result)
             
+        except (FileNotFoundError, ExcelFormatError) as e:
+            logger.error(f"Excel file error: {e}")
+            # For file/format errors, create error result and handle normally
+            error_result = ExcelProcessingResult(
+                success=False,
+                error_message=str(e),
+                questions_processed=0,
+                questions_failed=0
+            )
+            self.root.after(0, self._handle_excel_result, error_result)
+            
         except Exception as e:
+            logger.error(f"Error in Excel processing: {e}", exc_info=True)
+            # Show error on main thread
+            self.root.after(0, self._handle_processing_error, e)
             logger.error(f"Error in Excel processing: {e}", exc_info=True)
             # Show error on main thread
             self.root.after(0, self._handle_processing_error, e)
     
     async def _process_question_internal(self, question_text: str) -> ProcessingResult:
         """Internal async question processing."""
+        self.update_reasoning(f"Processing question: '{question_text[:100]}...'")
+        
         # Ensure agent coordinator is available
         if not self.agent_coordinator:
+            self.update_reasoning("Initializing Azure AI agents... (this may take 30-60 seconds)")
+            
+            # Lazy import to avoid slow startup
+            from utils.azure_auth import get_azure_client
+            
             azure_client = await get_azure_client()
             bing_connection_id = config_manager.get_bing_connection_id()
             
             from agents.workflow_manager import create_agent_coordinator
             self.agent_coordinator = await create_agent_coordinator(azure_client, bing_connection_id)
+            
+            self.update_reasoning("Azure AI agents initialized successfully")
         
         # Create question object
         question = Question(
@@ -350,40 +406,209 @@ class UIManager:
             max_retries=self.max_retries_var.get()
         )
         
+        self.update_reasoning(f"Question object created with context: {self.context_var.get()}")
+        
         # Process with progress updates
-        return await self.agent_coordinator.process_question(question, self.update_progress)
+        return await self.agent_coordinator.process_question(question, self.update_progress, self.update_reasoning)
     
     async def _process_excel_internal(self, file_path: str) -> ExcelProcessingResult:
-        """Internal async Excel processing."""
-        # TODO: Implement Excel processing workflow
-        # This will be implemented in User Story 2
-        raise NotImplementedError("Excel processing will be implemented in User Story 2")
+        """Internal async Excel processing with live UI updates."""
+        try:
+            # Clear reasoning display and add initial message
+            self.root.after(0, self._clear_reasoning_display)
+            self.update_reasoning("Starting Excel file processing...")
+            
+            # Step 1: Load workbook
+            self.root.after(0, lambda: self.status_manager.set_status("Loading Excel file...", "info"))
+            self.update_reasoning(f"Loading Excel file: {file_path}")
+            loader = ExcelLoader()
+            workbook_data = loader.load_workbook(file_path)
+            
+            # Step 2: Create UI update queue
+            self.ui_update_queue = UIUpdateQueue(maxsize=100)
+            self.update_reasoning(f"Loaded workbook with {len(workbook_data.sheets)} sheets, {workbook_data.total_questions} total questions")
+            
+            # Step 3: Replace answer_display with WorkbookView on main thread
+            self.root.after(0, lambda: self.status_manager.set_status("Creating spreadsheet view...", "info"))
+            
+            # Show workbook immediately so user can see the questions being processed
+            self.root.after(0, self._show_workbook_view, workbook_data, self.ui_update_queue)
+            self.update_reasoning("Spreadsheet view created - you can now see questions in the Answer tab")
+            
+            # Step 4: Ensure agent coordinator is available
+            if not self.agent_coordinator:
+                self.root.after(0, lambda: self.status_manager.set_status("Initializing Azure AI agents... (this takes 30-60 seconds)", "info"))
+                self.update_reasoning("Initializing Azure AI agents... (this may take 30-60 seconds)")
+                
+                # Lazy import to avoid slow startup
+                from utils.azure_auth import get_azure_client
+                azure_client = await get_azure_client()
+                bing_connection_id = config_manager.get_bing_connection_id()
+                
+                from agents.workflow_manager import create_agent_coordinator
+                self.agent_coordinator = await create_agent_coordinator(azure_client, bing_connection_id)
+                self.update_reasoning("Azure AI agents initialized successfully")
+            
+            # Step 5: Process workbook (import ExcelProcessor lazily)
+            self.root.after(0, lambda: self.status_manager.set_status("Starting question processing...", "info"))
+            from excel.processor import ExcelProcessor
+            processor = ExcelProcessor(self.agent_coordinator, self.ui_update_queue, self.update_reasoning)
+            result = await processor.process_workbook(
+                workbook_data,
+                self.context_var.get(),
+                self.char_limit_var.get(),
+                self.max_retries_var.get()
+            )
+            
+            # Step 6: Save workbook if successful
+            if result.success:
+                self.root.after(0, lambda: self.status_manager.set_status("Saving results to Excel file...", "info"))
+                self.update_reasoning("Saving results back to Excel file...")
+                loader.save_workbook(workbook_data)
+                self.update_reasoning(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
+                logger.info(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
+            else:
+                self.update_reasoning(f"Excel processing failed: {result.error_message}")
+            
+            return result
+            
+        except FileNotFoundError as e:
+            logger.error(f"Excel file not found: {e}")
+            return ExcelProcessingResult(
+                success=False,
+                error_message=f"File not found: {file_path}",
+                questions_processed=0,
+                questions_failed=0
+            )
+        
+        except ExcelFormatError as e:
+            logger.error(f"Excel format error: {e}")
+            return ExcelProcessingResult(
+                success=False,
+                error_message=f"Invalid Excel file format: {str(e)}",
+                questions_processed=0,
+                questions_failed=0
+            )
+        
+        except ImportError as e:
+            logger.error(f"Import error in Excel processing: {e}", exc_info=True)
+            return ExcelProcessingResult(
+                success=False,
+                error_message=f"Failed to import required components: {str(e)}",
+                questions_processed=0,
+                questions_failed=0
+            )
+        
+        except asyncio.TimeoutError as e:
+            logger.error(f"Timeout in Excel processing: {e}", exc_info=True)
+            return ExcelProcessingResult(
+                success=False,
+                error_message="Processing timed out. Please check your Azure configuration and network connection.",
+                questions_processed=0,
+                questions_failed=0
+            )
+            
+        except Exception as e:
+            logger.error(f"Unexpected error in Excel processing: {e}", exc_info=True)
+            return ExcelProcessingResult(
+                success=False,
+                error_message=f"Processing failed: {str(e)}",
+                questions_processed=0,
+                questions_failed=0
+            )
     
     def _handle_question_result(self, result: ProcessingResult) -> None:
         """Handle question processing result on main thread."""
         try:
             if result.success and result.answer:
+                self.update_reasoning("Question processing completed successfully!")
                 self.display_answer(result.answer.content, result.answer.sources)
                 self.status_manager.set_status(f"Processing completed successfully in {result.processing_time:.1f}s", "success")
             else:
+                self.update_reasoning(f"Question processing failed: {result.error_message}")
                 self.display_error("processing", result.error_message or "Unknown processing error")
                 self.status_manager.set_status("Processing failed", "error")
         
         finally:
             self._set_processing_state(False)
     
+    def _show_workbook_view(self, workbook_data: WorkbookData, ui_queue: UIUpdateQueue) -> None:
+        """Replace answer_display with WorkbookView (main thread only).
+        
+        Args:
+            workbook_data: WorkbookData to display
+            ui_queue: UI update queue for live updates
+        """
+        try:
+            # Store current workbook data
+            self.current_workbook_data = workbook_data
+            
+            # Hide current answer display
+            if self.answer_display:
+                self.answer_display.pack_forget()
+            
+            # Create and show WorkbookView
+            parent_frame = self.answer_display.master if self.answer_display else self.root
+            self.workbook_view = WorkbookView(
+                parent_frame,
+                workbook_data,
+                ui_queue
+            )
+            notebook = self.workbook_view.render()
+            notebook.pack(fill=tk.BOTH, expand=True)
+            
+            # Start polling for updates
+            self.workbook_view.start_update_polling()
+            
+            logger.info(f"Displayed workbook view with {len(workbook_data.sheets)} sheets")
+            
+        except Exception as e:
+            logger.error(f"Error showing workbook view: {e}", exc_info=True)
+            self.display_error("ui_error", f"Failed to display Excel file: {str(e)}")
+    
+    def _restore_answer_display(self) -> None:
+        """Restore the original answer display after Excel processing."""
+        try:
+            # Cleanup workbook view
+            if self.workbook_view:
+                self.workbook_view.destroy()
+                self.workbook_view = None
+            
+            # Clear workbook data
+            self.current_workbook_data = None
+            
+            # Close UI queue
+            if self.ui_update_queue:
+                self.ui_update_queue.close()
+                self.ui_update_queue = None
+            
+            # Show answer display again
+            if self.answer_display:
+                self.answer_display.pack(fill=tk.BOTH, expand=True)
+            
+            logger.info("Restored original answer display")
+            
+        except Exception as e:
+            logger.error(f"Error restoring answer display: {e}", exc_info=True)
+    
     def _handle_excel_result(self, result: ExcelProcessingResult) -> None:
         """Handle Excel processing result on main thread."""
         try:
             if result.success:
-                # Display Excel results
-                summary = f"Excel processing completed: {result.questions_processed} questions processed"
+                # Display Excel results summary
+                summary = f"Excel processing completed successfully!\n\n"
+                summary += f"Questions processed: {result.questions_processed}\n"
+                summary += f"Questions failed: {result.questions_failed}\n"
+                summary += f"Processing time: {result.processing_time:.1f} seconds\n"
                 if result.output_file_path:
-                    summary += f"\nOutput saved to: {result.output_file_path}"
+                    summary += f"Output saved to: {result.output_file_path}"
                 
-                self.display_answer(summary, [])
+                # Show completion message but keep workbook view visible
+                messagebox.showinfo("Excel Processing Complete", summary)
                 self.status_manager.set_status("Excel processing completed", "success")
             else:
+                # Show error and restore answer display
+                self._restore_answer_display()
                 self.display_error("excel_format", result.error_message or "Excel processing failed")
                 self.status_manager.set_status("Excel processing failed", "error")
         
@@ -458,16 +683,35 @@ class UIManager:
         # Implementation will be completed in User Story 2
         return asyncio.run(self._process_excel_internal(file_path))
     
-    def update_progress(self, agent: str, message: str, progress: float) -> None:
-        """Update UI with current processing progress.
+    def update_reasoning(self, message: str) -> None:
+        """Update the reasoning display with agent processing details.
         
         Args:
-            agent: Current agent name.
-            message: Status message for reasoning panel.
-            progress: Completion percentage (0.0 to 1.0).
+            message: Reasoning message to display.
         """
-        # Update status manager on main thread
-        self.root.after(0, self.status_manager.update_progress, agent, message, progress)
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        formatted_message = f"[{timestamp}] {message}\n"
+        
+        # Update on main thread
+        self.root.after(0, self._append_reasoning_text, formatted_message)
+    
+    def _append_reasoning_text(self, text: str) -> None:
+        """Append text to reasoning display (main thread only).
+        
+        Args:
+            text: Text to append.
+        """
+        try:
+            if self.reasoning_display:
+                self.reasoning_display.config(state=tk.NORMAL)
+                self.reasoning_display.insert(tk.END, text)
+                self.reasoning_display.see(tk.END)  # Auto-scroll to bottom
+                self.reasoning_display.config(state=tk.DISABLED)
+            else:
+                logger.warning("Reasoning display not available")
+        except Exception as e:
+            logger.error(f"Error appending to reasoning display: {e}")
     
     def display_answer(self, answer_content: str, sources: list[str] = None) -> None:
         """Display answer and sources in the UI.
@@ -508,6 +752,46 @@ class UIManager:
         """
         self.error_dialog.show_error(error_type, message, details)
     
+    def update_progress(self, agent: str, message: str, progress: float) -> None:
+        """Update UI with current processing progress.
+        
+        Args:
+            agent: Current agent name.
+            message: Status message.
+            progress: Completion percentage (0.0 to 1.0).
+        """
+        # Update status manager on main thread
+        self.root.after(0, self.status_manager.update_progress, agent, message, progress)
+    
+    def update_reasoning(self, message: str) -> None:
+        """Update the reasoning display with agent processing details.
+        
+        Args:
+            message: Reasoning message to display.
+        """
+        try:
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+            formatted_message = f"[{timestamp}] {message}\n"
+            
+            # Update on main thread
+            self.root.after(0, self._append_reasoning_text, formatted_message)
+            
+            # Also log to console for debugging
+            logger.info(f"UI Reasoning: {message}")
+        except Exception as e:
+            logger.error(f"Error updating reasoning display: {e}")
+    
+    def _clear_reasoning_display(self) -> None:
+        """Clear the reasoning display (main thread only)."""
+        try:
+            if self.reasoning_display:
+                self.reasoning_display.config(state=tk.NORMAL)
+                self.reasoning_display.delete("1.0", tk.END)
+                self.reasoning_display.config(state=tk.DISABLED)
+        except Exception as e:
+            logger.error(f"Error clearing reasoning display: {e}")
+    
     def _set_processing_state(self, processing: bool) -> None:
         """Enable/disable UI elements during processing."""
         self.processing_active = processing
@@ -533,6 +817,11 @@ class UIManager:
         self.sources_display.config(state=tk.NORMAL)
         self.sources_display.delete("1.0", tk.END)
         self.sources_display.config(state=tk.DISABLED)
+        
+        if self.reasoning_display:
+            self.reasoning_display.config(state=tk.NORMAL)
+            self.reasoning_display.delete("1.0", tk.END)
+            self.reasoning_display.config(state=tk.DISABLED)
         
         self.status_manager.set_status("Ready", "info")
     

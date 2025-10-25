@@ -18,7 +18,8 @@ from utils.exceptions import (
 from utils.azure_auth import foundry_agent_session
 from agents.question_answerer import QuestionAnswererExecutor
 from agents.answer_checker import AnswerCheckerExecutor
-from agents.link_checker import LinkCheckerExecutor
+# Temporarily commented out to avoid Playwright dependency issues
+# from agents.link_checker import LinkCheckerExecutor
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,8 @@ class AgentCoordinator:
         # Agent executors
         self.question_answerer: Optional[QuestionAnswererExecutor] = None
         self.answer_checker: Optional[AnswerCheckerExecutor] = None
-        self.link_checker: Optional[LinkCheckerExecutor] = None
+        # Temporarily commented out to avoid Playwright dependency issues
+        # self.link_checker: Optional[LinkCheckerExecutor] = None
     
     async def create_agents(self) -> None:
         """Initialize the three specialized agents with Azure AI Foundry.
@@ -54,25 +56,29 @@ class AgentCoordinator:
         try:
             logger.info("Creating specialized agent executors...")
             
-            # Create the three agent executors
+            # Create the three agent executors with individual timeouts
+            logger.info("Creating question answerer executor...")
             self.question_answerer = QuestionAnswererExecutor(
                 azure_client=self.azure_client,
                 bing_connection_id=self.bing_connection_id
             )
             
+            logger.info("Creating answer checker executor...")
             self.answer_checker = AnswerCheckerExecutor(
                 azure_client=self.azure_client
             )
             
-            self.link_checker = LinkCheckerExecutor(
-                azure_client=self.azure_client
-            )
+            # Temporarily commented out to avoid Playwright dependency issues
+            # self.link_checker = LinkCheckerExecutor(
+            #     azure_client=self.azure_client
+            # )
             
-            # Build the sequential workflow
+            logger.info("Building workflow...")
+            # Build the sequential workflow (without link checker for now)
             self.workflow = (
                 WorkflowBuilder()
                 .add_edge(self.question_answerer, self.answer_checker)
-                .add_edge(self.answer_checker, self.link_checker)
+                # .add_edge(self.answer_checker, self.link_checker)
                 .set_start_executor(self.question_answerer)
                 .build()
             )
@@ -88,7 +94,8 @@ class AgentCoordinator:
     async def process_question(
         self, 
         question: Question,
-        progress_callback: Callable[[str, str, float], None]
+        progress_callback: Callable[[str, str, float], None],
+        reasoning_callback: Callable[[str], None] = None
     ) -> ProcessingResult:
         """Execute multi-agent workflow for single question.
         
@@ -116,15 +123,41 @@ class AgentCoordinator:
                     log_workflow_progress(1, 3, f"Starting workflow attempt {retry_count + 1}")
                     progress_callback("workflow", f"Processing attempt {retry_count + 1}...", 0.0)
                     
+                    # Add verbose logging
+                    verbose_msg = f"🚀 Workflow attempt {retry_count + 1} starting for question: '{question.text[:100]}...'"
+                    logger.info(verbose_msg)
+                    if reasoning_callback:
+                        reasoning_callback(verbose_msg)
+                    
                     # Execute the workflow
+                    verbose_msg = "⚡ Executing multi-agent workflow (Question Answerer → Answer Checker)..."
+                    logger.info(verbose_msg)
+                    if reasoning_callback:
+                        reasoning_callback(verbose_msg)
+                    
+                    logger.info(f"🎯 Calling workflow.run() with question: '{question.text}'")
                     events = await self.workflow.run(question)
+                    
+                    # Add verbose logging for workflow result
+                    verbose_msg = f"✅ Workflow execution completed, checking outputs..."
+                    logger.info(verbose_msg)
+                    if reasoning_callback:
+                        reasoning_callback(verbose_msg)
                     
                     # Get the final result
                     outputs = events.get_outputs()
                     if not outputs:
+                        verbose_msg = "ERROR: No output received from workflow - agents may not be communicating properly"
+                        logger.error(verbose_msg)
+                        if reasoning_callback:
+                            reasoning_callback(verbose_msg)
                         raise AgentExecutionError("No output received from workflow")
                     
                     workflow_result = outputs[0]
+                    verbose_msg = f"Retrieved workflow result: {workflow_result.keys() if isinstance(workflow_result, dict) else type(workflow_result)}"
+                    logger.info(verbose_msg)
+                    if reasoning_callback:
+                        reasoning_callback(verbose_msg)
                     
                     # Check if processing was successful
                     if workflow_result.get("processing_complete", False):
@@ -133,6 +166,11 @@ class AgentCoordinator:
                         if validation_status == ValidationStatus.APPROVED:
                             # Success - create approved answer
                             processing_time = time.time() - start_time
+                            
+                            verbose_msg = f"Answer approved! Processing time: {processing_time:.2f}s"
+                            logger.info(verbose_msg)
+                            if reasoning_callback:
+                                reasoning_callback(verbose_msg)
                             
                             answer = Answer(
                                 content=workflow_result["raw_answer"],
@@ -160,7 +198,10 @@ class AgentCoordinator:
                             
                             # Log rejection reason and retry
                             rejection_reason = workflow_result.get("validation_feedback", "Unknown rejection reason")
-                            logger.info(f"Answer rejected (attempt {retry_count}): {rejection_reason}")
+                            verbose_msg = f"Answer rejected (attempt {retry_count}): {rejection_reason}"
+                            logger.info(verbose_msg)
+                            if reasoning_callback:
+                                reasoning_callback(verbose_msg)
                             progress_callback("workflow", f"Answer rejected, retrying... ({retry_count}/{question.max_retries})", 0.2)
                             
                             # Brief delay before retry
@@ -189,7 +230,10 @@ class AgentCoordinator:
                 
                 except Exception as e:
                     retry_count += 1
-                    logger.warning(f"Workflow attempt {retry_count} failed: {e}")
+                    verbose_msg = f"Workflow attempt {retry_count} failed: {e} (type: {type(e).__name__})"
+                    logger.warning(verbose_msg)
+                    if reasoning_callback:
+                        reasoning_callback(verbose_msg)
                     
                     if retry_count >= question.max_retries:
                         break
@@ -213,7 +257,8 @@ class AgentCoordinator:
     async def process_batch(
         self, 
         questions: List[Question],
-        progress_callback: Callable[[str, str, float], None]
+        progress_callback: Callable[[str, str, float], None],
+        reasoning_callback: Callable[[str], None] = None
     ) -> List[ProcessingResult]:
         """Execute multi-agent workflow for multiple questions.
         
@@ -248,7 +293,7 @@ class AgentCoordinator:
                     progress_callback(agent, message, overall_progress)
                 
                 # Process the individual question
-                result = await self.process_question(question, individual_progress)
+                result = await self.process_question(question, individual_progress, reasoning_callback)
                 results.append(result)
                 
                 logger.info(f"Question {i+1}/{total_questions} completed: {'SUCCESS' if result.success else 'FAILED'}")
@@ -323,15 +368,16 @@ class AgentCoordinator:
             if self.answer_checker:
                 await self.answer_checker.cleanup()
             
-            if self.link_checker:
-                await self.link_checker.cleanup()
+            # Temporarily commented out since link_checker is disabled
+            # if self.link_checker:
+            #     await self.link_checker.cleanup()
             
             # Reset state
             self.workflow = None
             self.executors_created = False
             self.question_answerer = None
             self.answer_checker = None
-            self.link_checker = None
+            # self.link_checker = None
             
             logger.info("Agent coordinator cleanup completed")
             
@@ -349,6 +395,18 @@ async def create_agent_coordinator(azure_client: AzureAIAgentClient, bing_connec
     Returns:
         Initialized AgentCoordinator instance.
     """
+    logger.info("Creating agent coordinator...")
     coordinator = AgentCoordinator(azure_client, bing_connection_id)
-    await coordinator.create_agents()
-    return coordinator
+    
+    logger.info("Creating agents with 60 second timeout...")
+    try:
+        # Add timeout to prevent hanging
+        await asyncio.wait_for(coordinator.create_agents(), timeout=60.0)
+        logger.info("Agent coordinator created successfully")
+        return coordinator
+    except asyncio.TimeoutError:
+        logger.error("Agent creation timed out after 60 seconds")
+        raise ResourceCreationError("Agent creation timed out. Please check your Azure configuration and network connection.")
+    except Exception as e:
+        logger.error(f"Failed to create agent coordinator: {e}")
+        raise
