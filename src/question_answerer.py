@@ -10,7 +10,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils.config import config_manager
-from utils.azure_auth import azure_authenticator, verify_azure_connectivity
+from utils.azure_auth import azure_authenticator, verify_azure_connectivity, test_authentication
 from utils.exceptions import (
     QuestionnaireError,
     ConfigurationError,
@@ -62,14 +62,10 @@ class QuestionnaireAgentApp:
             
             logger.info(f"Configuration validated successfully (endpoint: {config_manager.get_azure_endpoint()})")
             
-            # Test Azure connectivity
-            logger.info("Testing Azure connectivity...")
-            connectivity_ok = await verify_azure_connectivity()
-            
-            if not connectivity_ok:
-                logger.warning("Azure connectivity test failed - will try to continue anyway")
-            else:
-                logger.info("Azure connectivity test passed")
+            # Test Azure connectivity - this now includes authentication test
+            logger.info("Testing Azure connectivity and authentication...")
+            await verify_azure_connectivity()
+            logger.info("Azure connectivity and authentication verified successfully")
             
             # Initialize UI
             logger.info("Initializing user interface...")
