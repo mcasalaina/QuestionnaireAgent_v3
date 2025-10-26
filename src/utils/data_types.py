@@ -3,7 +3,8 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, List, Dict, Any
+import time
 
 
 class AgentType(Enum):
@@ -292,3 +293,170 @@ class RetrySettings:
         
         if self.max_delay < self.base_delay:
             raise ValueError("Max delay must be greater than or equal to base delay")
+
+
+# Live Excel Processing Data Types
+
+class CellState(Enum):
+    """Processing state of a single response cell."""
+    PENDING = "pending"
+    WORKING = "working"
+    COMPLETED = "completed"
+
+
+@dataclass
+class SheetData:
+    """Data for a single Excel sheet."""
+    sheet_name: str
+    sheet_index: int
+    questions: List[str]
+    answers: List[Optional[str]]
+    cell_states: List[CellState]
+    is_processing: bool = False
+    is_complete: bool = False
+    
+    def __post_init__(self):
+        """Validate invariants."""
+        if len(self.questions) != len(self.answers) or len(self.questions) != len(self.cell_states):
+            raise ValueError("Questions, answers, and cell_states must have the same length")
+        
+        if len(self.sheet_name) > 31:
+            raise ValueError("Sheet name cannot exceed 31 characters (Excel limit)")
+    
+    def get_progress(self) -> float:
+        """Return completion percentage (0.0 to 1.0)."""
+        if not self.questions:
+            return 0.0
+        completed = sum(1 for s in self.cell_states if s == CellState.COMPLETED)
+        return completed / len(self.questions)
+    
+    def get_pending_questions(self) -> List[tuple[int, str]]:
+        """Returns indices and text of questions in PENDING state."""
+        return [
+            (idx, question) 
+            for idx, (question, state) in enumerate(zip(self.questions, self.cell_states))
+            if state == CellState.PENDING
+        ]
+    
+    def mark_working(self, row_index: int) -> None:
+        """Transitions cell to WORKING state."""
+        if 0 <= row_index < len(self.cell_states):
+            self.cell_states[row_index] = CellState.WORKING
+    
+    def mark_completed(self, row_index: int, answer: str) -> None:
+        """Transitions cell to COMPLETED with answer."""
+        if 0 <= row_index < len(self.cell_states):
+            self.cell_states[row_index] = CellState.COMPLETED
+            self.answers[row_index] = answer
+            
+            # Update completion status
+            self.is_complete = all(s == CellState.COMPLETED for s in self.cell_states)
+
+
+@dataclass
+class WorkbookData:
+    """Data for entire Excel workbook."""
+    file_path: str
+    sheets: List[SheetData]
+    current_sheet_index: int = 0
+    
+    def __post_init__(self):
+        """Validate workbook data."""
+        if not self.sheets:
+            raise ValueError("Workbook must contain at least one sheet")
+        
+        if self.current_sheet_index < 0 or self.current_sheet_index >= len(self.sheets):
+            raise ValueError("Current sheet index out of range")
+        
+        if len(self.sheets) > 10:
+            raise ValueError("Maximum 10 sheets supported")
+    
+    @property
+    def total_questions(self) -> int:
+        """Total questions across all sheets."""
+        return sum(len(sheet.questions) for sheet in self.sheets)
+    
+    @property
+    def completed_questions(self) -> int:
+        """Total completed questions across all sheets."""
+        return sum(
+            sum(1 for s in sheet.cell_states if s == CellState.COMPLETED)
+            for sheet in self.sheets
+        )
+    
+    def get_active_sheet(self) -> Optional[SheetData]:
+        """Returns currently processing sheet."""
+        for sheet in self.sheets:
+            if sheet.is_processing:
+                return sheet
+        return None
+    
+    def advance_to_next_sheet(self) -> bool:
+        """Moves to next sheet, returns False if no more sheets."""
+        # Mark current sheet as not processing
+        if self.current_sheet_index < len(self.sheets):
+            self.sheets[self.current_sheet_index].is_processing = False
+        
+        # Find next incomplete sheet
+        for idx in range(self.current_sheet_index + 1, len(self.sheets)):
+            if not self.sheets[idx].is_complete:
+                self.current_sheet_index = idx
+                self.sheets[idx].is_processing = True
+                return True
+        
+        return False
+    
+    def get_overall_progress(self) -> float:
+        """Returns global completion percentage."""
+        if self.total_questions == 0:
+            return 0.0
+        return self.completed_questions / self.total_questions
+    
+    def is_complete(self) -> bool:
+        """Returns True if all sheets complete."""
+        return all(sheet.is_complete for sheet in self.sheets)
+
+
+@dataclass
+class NavigationState:
+    """Tracks user interaction with sheet tabs to control auto-navigation."""
+    user_selected_sheet: Optional[int] = None
+    
+    @property
+    def auto_navigation_enabled(self) -> bool:
+        """Whether system can auto-navigate."""
+        return self.user_selected_sheet is None
+    
+    def lock_to_sheet(self, sheet_index: int) -> None:
+        """User clicked tab, disable auto-navigation."""
+        self.user_selected_sheet = sheet_index
+    
+    def enable_auto_navigation(self) -> None:
+        """Clear user selection, enable auto-navigation."""
+        self.user_selected_sheet = None
+    
+    def should_navigate_to(self, sheet_index: int) -> bool:
+        """Returns True if the view should switch to the given sheet."""
+        if self.user_selected_sheet is None:
+            return True  # Auto-navigation enabled
+        return False  # User has control
+
+
+@dataclass
+class UIUpdateEvent:
+    """Event from background processing workflow to UI thread."""
+    event_type: str  # SHEET_START, CELL_WORKING, CELL_COMPLETED, etc.
+    payload: Dict[str, Any]
+    timestamp: float = field(default_factory=time.time)
+    
+    def __post_init__(self):
+        """Validate event data."""
+        valid_types = {
+            'SHEET_START', 'CELL_WORKING', 'CELL_COMPLETED', 
+            'SHEET_COMPLETE', 'WORKBOOK_COMPLETE', 'ERROR'
+        }
+        if self.event_type not in valid_types:
+            raise ValueError(f"Invalid event type: {self.event_type}")
+        
+        if not isinstance(self.payload, dict):
+            raise ValueError("Payload must be a dictionary")

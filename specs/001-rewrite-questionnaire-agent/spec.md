@@ -9,11 +9,11 @@
 
 ### Session 2025-10-09
 
-- Q: When Excel files cannot be opened or lack identifiable columns, what should the user experience be? → A: Show detailed error dialog with specific failure reason and suggested fixes
-- Q: What should happen when Azure AI Foundry services become unavailable during processing? → A: Fail immediately with clear error message and stop all processing. Verify Azure credentials immediately at app startup and attempt login if not authenticated.
-- Q: When all retry attempts are exhausted without generating an acceptable answer, what should the system do? → A: Show "Unable to generate acceptable answer" error and return to input screen. Exception: if Answer Checker approved but only Link Checker failed, emit the answer with blank links.
-- Q: What occurs when network connectivity fails during web search operations? → A: Fail immediately and display network connectivity error to user.
-- Q: For the separate UI and Excel handling modules, how should they communicate with the main application logic? → A: Direct method calls with shared data structures and synchronous interfaces.
+*   Q: When Excel files cannot be opened or lack identifiable columns, what should the user experience be? → A: Show detailed error dialog with specific failure reason and suggested fixes
+*   Q: What should happen when Azure AI Foundry services become unavailable during processing? → A: Fail immediately with clear error message and stop all processing. Verify Azure credentials immediately at app startup and attempt login if not authenticated.
+*   Q: When all retry attempts are exhausted without generating an acceptable answer, what should the system do? → A: Show "Unable to generate acceptable answer" error and return to input screen. Exception: if Answer Checker approved but only Link Checker failed, emit the answer with blank links.
+*   Q: What occurs when network connectivity fails during web search operations? → A: Fail immediately and display network connectivity error to user.
+*   Q: For the separate UI and Excel handling modules, how should they communicate with the main application logic? → A: Direct method calls with shared data structures and synchronous interfaces.
 
 ## User Scenarios & Testing
 
@@ -65,11 +65,11 @@ The system orchestrates three specialized agents (Question Answerer, Answer Chec
 
 ### Edge Cases
 
-- When all retry attempts are exhausted, show "Unable to generate acceptable answer" error and return to input screen (Exception: if Answer Checker approved but only Link Checker failed, emit answer with blank links)
-- Excel files that cannot be opened display detailed error dialog with specific failure reason and suggested fixes
-- Network connectivity failures during web search operations cause immediate failure with connectivity error displayed to user
-- Azure AI Foundry service unavailability causes immediate failure with clear error message and stops all processing
-- Excel files with complex formatting or merged cells immediately display error with specific formatting issues identified
+*   When all retry attempts are exhausted, show "Unable to generate acceptable answer" error and return to input screen (Exception: if Answer Checker approved but only Link Checker failed, emit answer with blank links)
+*   Excel files that cannot be opened display detailed error dialog with specific failure reason and suggested fixes
+*   Network connectivity failures during web search operations cause immediate failure with connectivity error displayed to user
+*   Azure AI Foundry service unavailability causes immediate failure with clear error message and stops all processing
+*   Excel files with complex formatting or merged cells immediately display error with specific formatting issues identified
 
 ## Requirements
 
@@ -90,11 +90,11 @@ The system orchestrates three specialized agents (Question Answerer, Answer Chec
 *   **FR-012**: System MUST automatically identify question and answer columns in Excel files using AI analysis
 *   **FR-013**: System MUST preserve original Excel file formatting when generating output files
 *   **FR-014**: System MUST enable mock mode for testing without requiring Azure credentials or consuming cloud resources
-- **FR-016**: System MUST fail immediately with clear error messages when Azure AI Foundry services become unavailable during processing
-- **FR-017**: System MUST show "Unable to generate acceptable answer" error when all retries are exhausted, with exception for Answer Checker approved responses where only Link Checker failed (emit answer with blank links)
-- **FR-018**: System MUST display detailed error dialogs for Excel file failures, including specific failure reasons and suggested fixes for unsupported formats, unidentifiable columns, or complex formatting
-- **FR-019**: System MUST fail immediately and display network connectivity error when web search operations cannot connect due to network issues
-- **FR-020**: System MUST use direct method calls with shared data structures and synchronous interfaces for communication between UI module, Excel handling module, and main application logic
+*   **FR-016**: System MUST fail immediately with clear error messages when Azure AI Foundry services become unavailable during processing
+*   **FR-017**: System MUST show "Unable to generate acceptable answer" error when all retries are exhausted, with exception for Answer Checker approved responses where only Link Checker failed (emit answer with blank links)
+*   **FR-018**: System MUST display detailed error dialogs for Excel file failures, including specific failure reasons and suggested fixes for unsupported formats, unidentifiable columns, or complex formatting
+*   **FR-019**: System MUST fail immediately and display network connectivity error when web search operations cannot connect due to network issues
+*   **FR-020**: System MUST use direct method calls with shared data structures and synchronous interfaces for communication between UI module, Excel handling module, and main application logic
 
 ### Key Entities
 

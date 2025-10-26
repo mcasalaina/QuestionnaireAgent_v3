@@ -89,11 +89,17 @@ IMPORTANT:
         question = data.get("question")
         raw_answer = data.get("raw_answer")
         
+        logger.info(f"🔍 ANSWER CHECKER AGENT CALLED")
+        logger.info(f"📋 Validating answer for question: '{question.text if question else 'Unknown'}'")
+        logger.info(f"📄 Answer to validate ({len(raw_answer) if raw_answer else 0} chars): {raw_answer[:150] if raw_answer else 'None'}...")
+        
         if not question or not raw_answer:
+            logger.error("❌ Missing question or answer data from previous agent")
             raise AgentExecutionError("Missing question or answer data from previous agent")
         
         with create_span("answer_checker_execution", question_text=question.text):
             try:
+                logger.info(f"🚀 Answer Checker starting validation for question: '{question.text[:100]}...'")
                 log_agent_step(
                     "answer_checker",
                     f"Validating answer quality (answer length: {len(raw_answer)} chars)",
@@ -101,26 +107,40 @@ IMPORTANT:
                 )
                 
                 # Get the agent
+                logger.info("🔧 Getting Answer Checker agent instance...")
                 agent = await self._get_agent()
+                logger.info("✅ Answer Checker agent retrieved successfully")
                 
                 # Create validation prompt
                 validation_prompt = self._build_validation_prompt(question, raw_answer)
                 messages = [ChatMessage(role=Role.USER, text=validation_prompt)]
+                logger.info(f"📝 Built validation prompt ({len(validation_prompt)} chars), sending to agent...")
+                logger.info(f"🎯 Validation criteria: accuracy, completeness, {question.char_limit} char limit, plain text format")
                 
                 # Run the agent to get validation result
+                logger.info("🔍 Calling agent.run() to get validation result...")
                 response = await agent.run(messages)
                 validation_result = response.text
+                logger.info(f"📋 Answer Checker returned validation ({len(validation_result)} chars): {validation_result[:200]}...")
                 
                 execution_time = time.time() - start_time
                 
                 # Parse validation decision
                 validation_status, feedback = self._parse_validation_response(validation_result)
+                logger.info(f"🎯 Parsed validation result: {validation_status.value}")
+                logger.info(f"💬 Validation feedback: {feedback[:200]}...")
+                
+                if validation_status == ValidationStatus.APPROVED:
+                    logger.info("✅ ANSWER APPROVED - meets all quality standards")
+                else:
+                    logger.info(f"❌ ANSWER REJECTED - reason: {validation_status.value}")
                 
                 # Update context with validation results
                 updated_data = data.copy()
                 updated_data["validation_status"] = validation_status
                 updated_data["validation_feedback"] = feedback
                 updated_data["checked_answer"] = raw_answer if validation_status == ValidationStatus.APPROVED else None
+                updated_data["processing_complete"] = True  # Mark workflow as complete
                 
                 # Add agent step to history
                 agent_steps = updated_data.get("agent_steps", [])
@@ -135,7 +155,14 @@ IMPORTANT:
                 )
                 updated_data["agent_steps"] = agent_steps
                 
+                # Send the result to workflow context AND set as output
                 await ctx.send_message(updated_data)
+                
+                # IMPORTANT: Yield the final output for the workflow
+                await ctx.yield_output(updated_data)
+                
+                logger.info(f"📤 Answer Checker sending result data to workflow: {list(updated_data.keys())}")
+                logger.info(f"🏁 Answer Checker completed: {validation_status.value} in {execution_time:.2f}s")
                 
                 log_agent_step(
                     "answer_checker",
@@ -143,8 +170,6 @@ IMPORTANT:
                     "completed",
                     execution_time
                 )
-                
-                logger.info(f"Answer Checker completed: {validation_status.value} in {execution_time:.2f}s")
                 
             except Exception as e:
                 execution_time = time.time() - start_time
@@ -176,6 +201,10 @@ IMPORTANT:
                 error_data["error"] = AgentExecutionError(error_message)
                 
                 await ctx.send_message(error_data)
+                
+                # Yield error output for workflow
+                await ctx.yield_output(error_data)
+                
                 raise AgentExecutionError(error_message) from e
     
     def _build_validation_prompt(self, question: Question, answer: str) -> str:
