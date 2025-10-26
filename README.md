@@ -29,8 +29,13 @@ If either checker rejects the answer, the Question Answerer reformulates and the
 
 - Python 3.8 or higher
 - Azure subscription with AI Foundry project
-- Azure CLI installed and authenticated (`az login`)
 - Bing Search resource connected to your AI Foundry project
+
+**Authentication:** The application will test your Azure authentication immediately on startup. If you're not already logged in, it will automatically open a browser window for interactive login. 
+
+If you prefer to authenticate before starting the app, you can:
+- Run `az login` in your terminal
+- Set up environment variables for service principal authentication
 
 ### Install Dependencies
 
