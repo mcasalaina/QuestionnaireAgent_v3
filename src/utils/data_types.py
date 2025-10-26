@@ -38,6 +38,14 @@ class ProcessingStatus(Enum):
     FAILED = "failed"
 
 
+class AgentInitState(Enum):
+    """State of agent initialization process."""
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 @dataclass
 class Question:
     """Represents a user-submitted question requiring research and validation."""

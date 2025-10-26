@@ -7,7 +7,7 @@ import asyncio
 import queue
 from typing import Optional, Callable, Any
 import logging
-from utils.data_types import Question, ProcessingResult, ExcelProcessingResult, WorkbookData
+from utils.data_types import Question, ProcessingResult, ExcelProcessingResult, WorkbookData, AgentInitState
 from utils.exceptions import (
     AzureServiceError, NetworkError, AuthenticationError, 
     ConfigurationError, ExcelFormatError
@@ -30,6 +30,11 @@ from .workbook_view import WorkbookView
 logger = logging.getLogger(__name__)
 
 
+# Agent initialization constants
+AGENT_INIT_MAX_WAIT_SECONDS = 120  # Maximum time to wait for agent initialization
+AGENT_INIT_POLL_INTERVAL = 0.5  # How often to check initialization status (seconds)
+
+
 class UIManager:
     """Main GUI interface for the questionnaire application."""
     
@@ -42,7 +47,7 @@ class UIManager:
         self.agent_coordinator = agent_coordinator
         
         # Agent initialization state tracking
-        self.agent_init_state = "not_started"  # not_started, in_progress, completed, failed
+        self.agent_init_state = AgentInitState.NOT_STARTED
         self.agent_init_error: Optional[str] = None
         self.agent_init_future = None
         
@@ -931,12 +936,12 @@ class UIManager:
     
     def _start_agent_initialization(self) -> None:
         """Start agent initialization asynchronously in background."""
-        if self.agent_coordinator or self.agent_init_state != "not_started":
+        if self.agent_coordinator or self.agent_init_state != AgentInitState.NOT_STARTED:
             # Already have coordinator or initialization already started/completed
             return
         
         logger.info("Starting background agent initialization...")
-        self.agent_init_state = "in_progress"
+        self.agent_init_state = AgentInitState.IN_PROGRESS
         self.status_manager.set_status("Initializing agents in background...", "info")
         self.update_reasoning("Starting agent initialization in background...")
         
@@ -978,18 +983,19 @@ class UIManager:
     def _handle_agent_init_success(self, coordinator) -> None:
         """Handle successful agent initialization on main thread."""
         self.agent_coordinator = coordinator
-        self.agent_init_state = "completed"
+        self.agent_init_state = AgentInitState.COMPLETED
         self.status_manager.set_status("Ready - Agents initialized", "success")
         self.update_reasoning("✅ Agent initialization completed - ready to process questions")
         logger.info("Agent initialization completed successfully")
     
     def _handle_agent_init_error(self, error: Exception) -> None:
         """Handle agent initialization error on main thread."""
-        self.agent_init_state = "failed"
+        self.agent_init_state = AgentInitState.FAILED
         self.agent_init_error = str(error)
         self.status_manager.set_status("Agent initialization failed", "error")
         self.update_reasoning(f"❌ Agent initialization failed: {error}")
         logger.error(f"Agent initialization failed: {error}", exc_info=True)
+
     
     async def _ensure_agents_ready(self) -> None:
         """Ensure agents are initialized, waiting if necessary.
@@ -1001,59 +1007,57 @@ class UIManager:
             # Already initialized
             return
         
-        if self.agent_init_state == "completed":
+        if self.agent_init_state == AgentInitState.COMPLETED:
             # Should have coordinator but don't - this is unexpected
             if not self.agent_coordinator:
                 logger.warning("Agent init state is 'completed' but no coordinator - reinitializing")
-                self.agent_init_state = "not_started"
+                self.agent_init_state = AgentInitState.NOT_STARTED
         
-        if self.agent_init_state == "failed":
+        if self.agent_init_state == AgentInitState.FAILED:
             # Previous initialization failed - raise error
             error_msg = f"Agent initialization previously failed: {self.agent_init_error}"
             raise Exception(error_msg)
         
-        if self.agent_init_state == "not_started":
+        if self.agent_init_state == AgentInitState.NOT_STARTED:
             # Not started yet - start now and wait
             self.update_reasoning("Agents not yet initialized - starting initialization now...")
             await self._create_agent_coordinator_sync()
             return
         
-        if self.agent_init_state == "in_progress":
+        if self.agent_init_state == AgentInitState.IN_PROGRESS:
             # Initialization in progress - wait for it to complete
             self.update_reasoning("Waiting for agent initialization to complete...")
             logger.info("Waiting for agent initialization to complete...")
             
             # Poll until initialization completes or fails
-            max_wait_seconds = 120  # 2 minutes max wait
-            poll_interval = 0.5  # Check every 500ms
             elapsed = 0.0
             
-            while self.agent_init_state == "in_progress" and elapsed < max_wait_seconds:
-                await asyncio.sleep(poll_interval)
-                elapsed += poll_interval
+            while self.agent_init_state == AgentInitState.IN_PROGRESS and elapsed < AGENT_INIT_MAX_WAIT_SECONDS:
+                await asyncio.sleep(AGENT_INIT_POLL_INTERVAL)
+                elapsed += AGENT_INIT_POLL_INTERVAL
             
-            if self.agent_init_state == "completed":
+            if self.agent_init_state == AgentInitState.COMPLETED:
                 if self.agent_coordinator:
                     self.update_reasoning("✅ Agent initialization completed")
                     return
                 else:
                     # State is completed but no coordinator - shouldn't happen
                     raise Exception("Agent initialization completed but coordinator not available")
-            elif self.agent_init_state == "failed":
+            elif self.agent_init_state == AgentInitState.FAILED:
                 raise Exception(f"Agent initialization failed: {self.agent_init_error}")
             else:
                 # Timed out waiting
-                raise Exception(f"Timed out waiting for agent initialization after {max_wait_seconds}s")
+                raise Exception(f"Timed out waiting for agent initialization after {AGENT_INIT_MAX_WAIT_SECONDS}s")
     
     async def _create_agent_coordinator_sync(self):
         """Create agent coordinator synchronously (blocking)."""
-        self.agent_init_state = "in_progress"
+        self.agent_init_state = AgentInitState.IN_PROGRESS
         try:
             coordinator = await self._create_agent_coordinator()
             self.agent_coordinator = coordinator
-            self.agent_init_state = "completed"
+            self.agent_init_state = AgentInitState.COMPLETED
         except Exception as e:
-            self.agent_init_state = "failed"
+            self.agent_init_state = AgentInitState.FAILED
             self.agent_init_error = str(e)
             raise
     
