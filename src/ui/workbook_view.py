@@ -44,6 +44,7 @@ class WorkbookView:
         self.poll_after_id: Optional[str] = None
         
         # Configure custom style for workbook notebook to position tabs at bottom
+        # Note: Style configuration persists globally after being set
         style = ttk.Style()
         style.configure('WorkbookNotebook.TNotebook', tabposition='s')  # 's' = south (bottom)
     
