@@ -38,6 +38,19 @@ class ProcessingStatus(Enum):
     FAILED = "failed"
 
 
+class AgentInitState(Enum):
+    """State of agent initialization process.
+    
+    Note: While this enum shares some values with ProcessingStatus,
+    they represent different concepts and having separate enums provides
+    better type safety and clarity in the codebase.
+    """
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 @dataclass
 class Question:
     """Represents a user-submitted question requiring research and validation."""
