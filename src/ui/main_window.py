@@ -531,9 +531,62 @@ class UIManager:
             
             # Save workbook if successful
             if result.success:
-                self.update_reasoning("Saving results back to Excel file...")
+                self.update_reasoning("Processing complete - prompting for save location...")
+                
+                # Generate default filename suggestion
+                import os
+                original_dir = os.path.dirname(workbook_data.file_path)
+                original_name = os.path.basename(workbook_data.file_path)
+                name_without_ext, ext = os.path.splitext(original_name)
+                default_name = f"{name_without_ext}_answered{ext}"
+                
+                # Store the save dialog result in a variable accessible from main thread
+                self._save_dialog_result = None
+                self._save_dialog_completed = False
+                
+                def show_save_dialog():
+                    """Show Save As dialog on main thread."""
+                    default_path = os.path.join(original_dir, default_name)
+                    
+                    self._save_dialog_result = filedialog.asksaveasfilename(
+                        title="Save Completed Questionnaire",
+                        defaultextension=ext,
+                        initialfile=default_name,
+                        initialdir=original_dir,
+                        filetypes=[
+                            ("Excel files", "*.xlsx *.xls"),
+                            ("All files", "*.*")
+                        ]
+                    )
+                    self._save_dialog_completed = True
+                
+                # Schedule dialog on main thread
+                self.root.after(0, show_save_dialog)
+                
+                # Wait for dialog to complete
+                while not self._save_dialog_completed:
+                    await asyncio.sleep(0.1)
+                
+                output_path = self._save_dialog_result
+                
+                # If user cancelled the dialog, don't save
+                if not output_path:
+                    self.update_reasoning("Save cancelled by user")
+                    return ExcelProcessingResult(
+                        success=False,
+                        error_message="Save cancelled by user",
+                        questions_processed=result.questions_processed,
+                        questions_failed=result.questions_failed,
+                        processing_time=result.processing_time
+                    )
+                
+                self.update_reasoning(f"Saving results to: {output_path}")
                 loader = ExcelLoader()
-                loader.save_workbook(workbook_data)
+                saved_path = loader.save_workbook(workbook_data, output_path)
+                
+                # Update result with actual output path
+                result.output_file_path = saved_path
+                
                 self.update_reasoning(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
                 logger.info(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
             else:
@@ -714,13 +767,11 @@ class UIManager:
         """Handle Excel processing result on main thread."""
         try:
             if result.success:
-                # Display Excel results summary
+                # Display simplified Excel results summary (user already chose save location)
                 summary = f"Excel processing completed successfully!\n\n"
                 summary += f"Questions processed: {result.questions_processed}\n"
                 summary += f"Questions failed: {result.questions_failed}\n"
-                summary += f"Processing time: {result.processing_time:.1f} seconds\n"
-                if result.output_file_path:
-                    summary += f"Output saved to: {result.output_file_path}"
+                summary += f"Processing time: {result.processing_time:.1f} seconds"
                 
                 # Show completion message but keep workbook view visible
                 messagebox.showinfo("Excel Processing Complete", summary)

@@ -88,16 +88,22 @@ class ExcelLoader:
         
         return WorkbookData(file_path=file_path, sheets=sheets)
     
-    def save_workbook(self, workbook_data: WorkbookData) -> None:
+    def save_workbook(self, workbook_data: WorkbookData, output_path: str = None) -> str:
         """Save all answers back to the Excel file.
         
         Args:
             workbook_data: WorkbookData with completed answers
+            output_path: Optional custom output path. If None, saves to original file.
+            
+        Returns:
+            The path where the file was saved
             
         Raises:
             ExcelFormatError: If workbook structure changed
             IOError: If file cannot be written
         """
+        # Use provided output path or default to original file path
+        save_path = output_path if output_path else workbook_data.file_path
         try:
             wb = openpyxl.load_workbook(workbook_data.file_path)
         except Exception as e:
@@ -123,9 +129,11 @@ class ExcelLoader:
                     ws.cell(row=row_idx, column=2, value=answer)
         
         try:
-            wb.save(workbook_data.file_path)
-            logger.info(f"Saved workbook to {workbook_data.file_path}")
+            wb.save(save_path)
+            logger.info(f"Saved workbook to {save_path}")
         except Exception as e:
             raise IOError(f"Cannot save Excel file: {e}")
         finally:
             wb.close()
+        
+        return save_path
