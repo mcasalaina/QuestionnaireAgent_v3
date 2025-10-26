@@ -46,7 +46,10 @@ class WorkbookView:
         # Configure custom style for workbook notebook to position tabs at bottom
         # Note: Style configuration persists globally after being set
         style = ttk.Style()
-        style.configure('WorkbookNotebook.TNotebook', tabposition='s')  # 's' = south (bottom)
+        # Position tabs at bottom, left-aligned
+        style.configure('WorkbookNotebook.TNotebook', 
+                       tabposition='s',      # 's' = south (bottom)
+                       tabmargins=[0, 0, 0, 0])  # Remove center margins for left alignment
     
     def render(self) -> ttk.Notebook:
         """Create notebook with all sheet tabs.
