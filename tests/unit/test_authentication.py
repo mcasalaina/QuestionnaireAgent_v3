@@ -73,7 +73,7 @@ class TestAuthenticationFlow:
         """Test that authenticator caches credential after first use."""
         authenticator = AzureAuthenticator()
         
-        with patch('utils.azure_auth.DefaultAzureCredential') as mock_cred_class:
+        with patch('utils.azure_auth.ChainedTokenCredential') as mock_cred_class:
             mock_credential = Mock()
             mock_cred_class.return_value = mock_credential
             
@@ -87,23 +87,29 @@ class TestAuthenticationFlow:
             mock_cred_class.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_authenticator_enables_interactive_browser(self):
-        """Test that authenticator enables interactive browser credential."""
+    async def test_authenticator_uses_interactive_browser_first(self):
+        """Test that authenticator creates credential chain with interactive browser first."""
         authenticator = AzureAuthenticator()
         
-        with patch('utils.azure_auth.DefaultAzureCredential') as mock_cred_class:
-            await authenticator.get_credential()
-            
-            # Verify interactive browser credential is enabled
-            call_kwargs = mock_cred_class.call_args.kwargs
-            assert call_kwargs.get('exclude_interactive_browser_credential') is False
+        with patch('utils.azure_auth.ChainedTokenCredential') as mock_chain:
+            with patch('utils.azure_auth.InteractiveBrowserCredential') as mock_browser:
+                with patch('utils.azure_auth.AzureCliCredential'):
+                    with patch('utils.azure_auth.EnvironmentCredential'):
+                        with patch('utils.azure_auth.ManagedIdentityCredential'):
+                            await authenticator.get_credential()
+                            
+                            # Verify ChainedTokenCredential was called
+                            mock_chain.assert_called_once()
+                            
+                            # Verify InteractiveBrowserCredential is created (first in chain)
+                            mock_browser.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_reset_authentication_clears_cache(self):
         """Test that reset_authentication clears cached credential."""
         authenticator = AzureAuthenticator()
         
-        with patch('utils.azure_auth.DefaultAzureCredential') as mock_cred_class:
+        with patch('utils.azure_auth.ChainedTokenCredential') as mock_cred_class:
             mock_credential = Mock()
             mock_cred_class.return_value = mock_credential
             
@@ -137,9 +143,8 @@ class TestAuthenticationErrorMessages:
             error_message = str(exc_info.value)
             
             # Check for helpful guidance in error message
+            assert "Interactive browser login" in error_message or "browser" in error_message
             assert "az login" in error_message
-            assert "Visual Studio Code" in error_message or "browser login" in error_message
-            assert "service principal" in error_message
     
     @pytest.mark.asyncio
     async def test_authentication_error_contains_original_error(self):

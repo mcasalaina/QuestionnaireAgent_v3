@@ -6,7 +6,13 @@ from typing import Optional
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 import aiohttp
-from azure.identity import DefaultAzureCredential
+from azure.identity import (
+    ChainedTokenCredential,
+    InteractiveBrowserCredential,
+    AzureCliCredential,
+    EnvironmentCredential,
+    ManagedIdentityCredential
+)
 from azure.core.exceptions import ClientAuthenticationError, ResourceNotFoundError
 from agent_framework_azure_ai import AzureAIAgentClient
 from .config import config_manager
@@ -25,8 +31,14 @@ class AzureAuthenticator:
         self._client = None
         self._endpoint_validated = False
     
-    async def get_credential(self) -> DefaultAzureCredential:
-        """Get authenticated Azure credential with fallback.
+    async def get_credential(self) -> ChainedTokenCredential:
+        """Get authenticated Azure credential with interactive browser as primary method.
+        
+        Credential chain priority:
+        1. InteractiveBrowserCredential - Opens browser for interactive login (PRIMARY)
+        2. AzureCliCredential - Uses existing 'az login' session if available
+        3. EnvironmentCredential - Uses service principal env vars if configured
+        4. ManagedIdentityCredential - For Azure-hosted apps with managed identity
         
         Returns:
             Authenticated Azure credential instance.
@@ -37,22 +49,22 @@ class AzureAuthenticator:
         if self._credential is not None:
             return self._credential
         
-        # Use DefaultAzureCredential - it will automatically try multiple auth methods
-        # including environment variables, managed identity, Azure CLI, and interactive browser
+        # Create credential chain with interactive browser as PRIMARY method
+        # This ensures browser login happens first if no existing auth is found
         try:
-            credential = DefaultAzureCredential(
-                exclude_visual_studio_code_credential=False,
-                exclude_shared_token_cache_credential=False,
-                exclude_interactive_browser_credential=False
+            credential = ChainedTokenCredential(
+                InteractiveBrowserCredential(),  # PRIMARY: Opens browser automatically
+                AzureCliCredential(),             # FALLBACK: If 'az login' already done
+                EnvironmentCredential(),          # FALLBACK: If service principal configured
+                ManagedIdentityCredential()       # FALLBACK: If running in Azure with managed identity
             )
             self._credential = credential
-            logger.info("DefaultAzureCredential created - will authenticate on first use (may open browser)")
+            logger.info("Credential chain created with interactive browser as primary authentication method")
             return credential
         except Exception as e:
-            logger.error(f"DefaultAzureCredential creation failed: {e}")
+            logger.error(f"Failed to create credential chain: {e}")
             raise AuthenticationError(
-                "Failed to create Azure credentials. Please ensure Azure CLI is installed "
-                "or your environment supports interactive authentication."
+                "Failed to create Azure credentials. Interactive browser login will be attempted."
             ) from e
     
     async def _validate_azure_endpoint(self) -> None:
@@ -253,11 +265,12 @@ async def test_authentication() -> bool:
         logger.error(f"Azure authentication failed: {e}")
         raise AuthenticationError(
             f"Azure authentication failed: {e}\n\n"
-            "Please ensure you are logged in to Azure using one of these methods:\n"
-            "1. Run 'az login' in your terminal\n"
-            "2. Sign in through Visual Studio Code\n"
-            "3. Use interactive browser login (a browser window should open automatically)\n"
-            "4. Set up environment variables for service principal authentication"
+            "The application attempted to authenticate using:\n"
+            "1. Interactive browser login (opens automatically)\n"
+            "2. Existing Azure CLI login (if 'az login' was run previously)\n"
+            "3. Service principal environment variables (if configured)\n"
+            "4. Managed identity (if running in Azure)\n\n"
+            "If the browser window did not open, you may need to run 'az login' manually."
         ) from e
 
 
