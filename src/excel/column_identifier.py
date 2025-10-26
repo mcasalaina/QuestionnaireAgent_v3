@@ -20,7 +20,7 @@ class ColumnIdentifier:
         """
         self.azure_client = azure_client
     
-    async def identify_columns(self, headers: List[str]) -> Dict[str, Optional[int]]:
+    def identify_columns(self, headers: List[str]) -> Dict[str, Optional[int]]:
         """Identify which columns contain Questions, Responses, and Documentation.
         
         Args:
@@ -36,15 +36,15 @@ class ColumnIdentifier:
         """
         if self.azure_client:
             try:
-                return await self._identify_with_ai(headers)
+                return self._identify_with_ai_sync(headers)
             except Exception as e:
                 logger.warning(f"Failed to identify columns with AI, falling back to heuristics: {e}")
         
         # Fallback to heuristic-based identification
         return self._identify_with_heuristics(headers)
     
-    async def _identify_with_ai(self, headers: List[str]) -> Dict[str, Optional[int]]:
-        """Use Azure AI to identify columns from headers.
+    def _identify_with_ai_sync(self, headers: List[str]) -> Dict[str, Optional[int]]:
+        """Use Azure AI to identify columns from headers (synchronous version).
         
         Args:
             headers: List of column header names
@@ -76,15 +76,25 @@ Use 0-based column indices. If a column cannot be identified, use null.
         
         logger.info(f"Sending column identification request to Azure AI with headers: {headers}")
         
-        # For now, we'll use a simple approach - create a thread and message
-        # This should be replaced with the actual Azure AI call pattern used in the project
+        try:
+            # Use asyncio.run to handle the async call in a sync context
+            import asyncio
+            result = asyncio.run(self._identify_with_ai_async_helper(headers, prompt))
+            return result
+        except Exception as e:
+            logger.warning(f"Error in AI identification, falling back to heuristics: {e}")
+            return self._identify_with_heuristics(headers)
+    
+    async def _identify_with_ai_async_helper(self, headers: List[str], prompt: str) -> Dict[str, Optional[int]]:
+        """Async helper for AI identification."""
+        from agent_framework import ChatAgent, ChatMessage, Role
         
         agent = ChatAgent(
             chat_client=self.azure_client,
             instructions="""You are a column identification expert. Analyze spreadsheet headers 
             and identify which columns contain Questions, Responses, and Documentation. 
             Always respond with valid JSON only.""",
-            model="gpt-4.1-mini"
+            model="gpt-4o-mini"
         )
         
         messages = [ChatMessage(role=Role.USER, content=prompt)]
@@ -120,7 +130,7 @@ Use 0-based column indices. If a column cannot be identified, use null.
             'question': None,
             'response': None,
             'documentation': None
-        }
+        }  # type: Dict[str, Optional[int]]
         
         # Normalize headers for comparison
         normalized_headers = [h.lower().strip() if h else '' for h in headers]

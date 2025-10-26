@@ -6,7 +6,6 @@ from utils.data_types import WorkbookData, SheetData, CellState
 from utils.exceptions import ExcelFormatError
 import logging
 import os
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -70,15 +69,8 @@ class ExcelLoader:
             column_mapping = {'question': 0, 'response': 1, 'documentation': None}
             if self.column_identifier:
                 try:
-                    # Run async column identification in sync context
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        column_mapping = loop.run_until_complete(
-                            self.column_identifier.identify_columns(headers)
-                        )
-                    finally:
-                        loop.close()
+                    # Column identification is now synchronous
+                    column_mapping = self.column_identifier.identify_columns(headers)
                     logger.info(f"Identified columns for sheet '{sheet_name}': {column_mapping}")
                 except Exception as e:
                     logger.warning(f"Failed to identify columns, using defaults (A=Question, B=Response): {e}")
