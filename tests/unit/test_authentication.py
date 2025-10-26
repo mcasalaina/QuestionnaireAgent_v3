@@ -87,22 +87,22 @@ class TestAuthenticationFlow:
             mock_cred_class.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_authenticator_uses_interactive_browser_first(self):
-        """Test that authenticator creates credential chain with interactive browser first."""
+    async def test_authenticator_uses_azure_cli_first(self):
+        """Test that authenticator creates credential chain with Azure CLI first."""
         authenticator = AzureAuthenticator()
         
         with patch('utils.azure_auth.ChainedTokenCredential') as mock_chain:
-            with patch('utils.azure_auth.InteractiveBrowserCredential') as mock_browser:
-                with patch('utils.azure_auth.AzureCliCredential'):
-                    with patch('utils.azure_auth.EnvironmentCredential'):
-                        with patch('utils.azure_auth.ManagedIdentityCredential'):
+            with patch('utils.azure_auth.AzureCliCredential') as mock_cli:
+                with patch('utils.azure_auth.EnvironmentCredential'):
+                    with patch('utils.azure_auth.ManagedIdentityCredential'):
+                        with patch('utils.azure_auth.InteractiveBrowserCredential'):
                             await authenticator.get_credential()
                             
                             # Verify ChainedTokenCredential was called
                             mock_chain.assert_called_once()
                             
-                            # Verify InteractiveBrowserCredential is created (first in chain)
-                            mock_browser.assert_called_once()
+                            # Verify AzureCliCredential is created (first in chain)
+                            mock_cli.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_reset_authentication_clears_cache(self):
@@ -143,8 +143,8 @@ class TestAuthenticationErrorMessages:
             error_message = str(exc_info.value)
             
             # Check for helpful guidance in error message
-            assert "Interactive browser login" in error_message or "browser" in error_message
-            assert "az login" in error_message
+            assert "Azure CLI" in error_message or "az login" in error_message or "azd login" in error_message
+            assert "browser" in error_message.lower()
     
     @pytest.mark.asyncio
     async def test_authentication_error_contains_original_error(self):
