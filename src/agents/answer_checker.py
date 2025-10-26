@@ -46,6 +46,14 @@ VALIDATION CRITERIA:
 5. Quality: Is it well-structured and professionally written?
 6. Sources: Are included links relevant and from authoritative sources?
 7. Formatting: Is the answer in PLAIN TEXT with NO markdown formatting?
+8. Professionalism: Answer must NOT contain self-referential language
+
+CRITICAL - SELF-REFERENTIAL LANGUAGE CHECK:
+- REJECT if answer contains phrases like "I am an AI assistant", "As an AI", "I can help", "I will", "I have"
+- REJECT if answer uses first-person language referring to itself
+- REJECT if answer includes any introductory statements about what it is or its capabilities
+- REJECT if answer contains any self-referential preambles or introductions
+- The answer must start directly with the content, not with statements about itself
 
 FORMATTING VALIDATION:
 - REJECT if answer contains **bold**, *italics*, `code blocks`, or # headers
@@ -61,17 +69,19 @@ If APPROVED:
 - Explain why the answer meets quality standards
 - Highlight strengths and accuracy of the content
 - Confirm it's in plain text format
+- Confirm it contains no self-referential language
 
 If REJECTED:
 - Specify exactly what needs to be improved
-- Be specific about factual errors, missing information, quality issues, or formatting problems
+- Be specific about factual errors, missing information, quality issues, formatting problems, or self-referential language
 - Provide clear guidance for improvement
+- If self-referential language is present, explicitly state that and provide examples
 
 IMPORTANT:
 - Be thorough but decisive in your evaluation
-- Prioritize accuracy, completeness, and plain text formatting
-- Reject answers that are incomplete, inaccurate, poorly structured, or use markdown
-- Only approve answers that truly meet professional standards AND are in plain text"""
+- Prioritize accuracy, completeness, plain text formatting, and professionalism
+- Reject answers that are incomplete, inaccurate, poorly structured, use markdown, or contain self-referential language
+- Only approve answers that truly meet professional standards, are in plain text, AND contain no self-referential language"""
             )
         return self.agent
     
@@ -232,6 +242,13 @@ VALIDATION REQUIREMENTS:
 - Should include authoritative sources
 - Must be professionally written
 - MUST be in plain text format with NO markdown formatting
+- MUST NOT contain self-referential language
+
+PROFESSIONALISM CHECK:
+- Verify answer has NO self-referential phrases like "I am an AI assistant", "As an AI", "I can help", "I will"
+- Verify answer does NOT use first-person language referring to itself
+- Verify answer does NOT include introductory statements about what it is
+- REJECT if any self-referential or first-person language is present
 
 FORMATTING CHECK:
 - Verify answer has NO **bold**, *italics*, `code`, # headers
