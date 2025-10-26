@@ -59,6 +59,9 @@ htmlcov/
 *.log
 logs/
 
+# Output directory
+output/
+
 # Excel temp files
 ~$*.xlsx
 ~$*.xls
