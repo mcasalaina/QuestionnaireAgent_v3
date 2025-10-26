@@ -220,6 +220,47 @@ async def foundry_agent_session():
                 logger.warning(f"Error during FoundryAgentSession cleanup: {cleanup_error}")
 
 
+async def test_authentication() -> bool:
+    """Test Azure authentication immediately by requesting an access token.
+    
+    This forces the credential to authenticate now, triggering interactive login if needed.
+    
+    Returns:
+        True if authentication is successful.
+        
+    Raises:
+        AuthenticationError: If authentication fails.
+    """
+    try:
+        logger.info("Testing Azure authentication...")
+        credential = await azure_authenticator.get_credential()
+        
+        # Request a token to force authentication now
+        # Use the Azure Management API scope as a standard test
+        logger.info("Requesting access token to verify authentication...")
+        token = await asyncio.to_thread(
+            credential.get_token,
+            "https://management.azure.com/.default"
+        )
+        
+        if token and token.token:
+            logger.info("Azure authentication successful")
+            return True
+        else:
+            raise AuthenticationError("Failed to obtain access token")
+            
+    except Exception as e:
+        logger.error(f"Azure authentication failed: {e}")
+        raise AuthenticationError(
+            f"Azure authentication failed: {e}\n\n"
+            "Please ensure you are logged in to Azure using one of these methods:\n"
+            "1. Run 'az login' in your terminal\n"
+            "2. Sign in through Visual Studio Code\n"
+            "3. Use interactive browser login (a browser window should open automatically)\n"
+            "4. Set up environment variables for service principal authentication"
+        ) from e
+
+
 async def verify_azure_connectivity() -> bool:
     """Verify Azure AI Foundry connectivity and configuration.
     
@@ -237,7 +278,10 @@ async def verify_azure_connectivity() -> bool:
             error_details = "; ".join(validation_result.error_details)
             raise AzureServiceError(f"Configuration validation failed: {error_details}")
         
-        # Test Azure connectivity - this will trigger authentication if needed
+        # Test authentication first
+        await test_authentication()
+        
+        # Test Azure connectivity - this will use the authenticated credential
         async with foundry_agent_session() as client:
             # If we get here, authentication and basic connectivity work
             logger.info("Azure AI Foundry connectivity verified successfully")
