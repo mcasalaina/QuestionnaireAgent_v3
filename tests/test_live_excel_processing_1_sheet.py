@@ -10,7 +10,7 @@ import os
 import sys
 from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from question_answerer import QuestionnaireAgentUI
+from question_answerer import QuestionnaireAgentApp
 
 def test_excel_processing_1_sheet():
     """Test that Excel processing doesn't throw errors with the 1_sheet sample file."""
@@ -31,7 +31,7 @@ def test_excel_processing_1_sheet():
     
     try:
         # Create the application in headless mode
-        app = QuestionnaireAgentUI(headless_mode=True, max_retries=1)  # Use fewer retries for faster testing
+        app = QuestionnaireAgentApp()  # Use fewer retries for faster testing
         
         # Process the Excel file
         success = app.process_excel_file_cli(

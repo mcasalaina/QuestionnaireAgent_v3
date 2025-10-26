@@ -15,7 +15,7 @@ from datetime import datetime
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from question_answerer import QuestionnaireAgentUI
+from question_answerer import QuestionnaireAgentApp
 
 
 class TestExcelProcessing:
@@ -24,7 +24,7 @@ class TestExcelProcessing:
     def setup_method(self):
         """Setup for each test method."""
         # Create a test app instance in headless mode
-        self.app = QuestionnaireAgentUI(headless_mode=True, max_retries=2)
+        self.app = QuestionnaireAgentApp()
         
         # Sample Excel file path
         self.sample_excel_path = Path(__file__).parent / "sample_questionnaire.xlsx"

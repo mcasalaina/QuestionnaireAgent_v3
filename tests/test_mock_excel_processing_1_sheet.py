@@ -7,7 +7,7 @@ import os
 import sys
 from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from question_answerer import QuestionnaireAgentUI
+from question_answerer import QuestionnaireAgentApp
 
 def test_mock_excel_processing_1_sheet():
     """Test that Excel processing doesn't throw errors with the 1_sheet sample file using mock mode."""
@@ -28,7 +28,7 @@ def test_mock_excel_processing_1_sheet():
     
     try:
         # Create the application in headless mode with mock enabled
-        app = QuestionnaireAgentUI(headless_mode=True, max_retries=1, mock_mode=True)  # Use fewer retries and enable mock mode
+        app = QuestionnaireAgentApp()  # Use fewer retries and enable mock mode
         
         # Process the Excel file
         success = app.process_excel_file_cli(

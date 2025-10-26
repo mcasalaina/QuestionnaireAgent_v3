@@ -13,7 +13,7 @@ import os
 # Add the parent directory to Python path to import question_answerer
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from question_answerer import QuestionnaireAgentUI
+from question_answerer import QuestionnaireAgentApp
 
 
 class TestLiveAzureQuestion(unittest.TestCase):
@@ -21,7 +21,7 @@ class TestLiveAzureQuestion(unittest.TestCase):
     
     def setUp(self):
         """Set up test environment."""
-        self.agent = QuestionnaireAgentUI(headless_mode=True)
+        self.agent = QuestionnaireAgentApp()
         
     def test_live_azure_question(self):
         """Test a live question about Azure Storage."""

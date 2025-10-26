@@ -50,7 +50,7 @@ class TestSingleQuestionTracing(unittest.TestCase):
             del os.environ["OTEL_SERVICE_NAME"]
         
         # Import and initialize the application
-        from question_answerer import QuestionnaireAgentUI
+        from question_answerer import QuestionnaireAgentApp
         
         # Mock Azure dependencies to avoid real connections during testing
         with patch('question_answerer.AIProjectClient') as mock_client, \
@@ -58,7 +58,7 @@ class TestSingleQuestionTracing(unittest.TestCase):
              patch('question_answerer.configure_azure_monitor') as mock_configure:
             
             # Initialize the application in headless mode
-            app = QuestionnaireAgentUI(headless_mode=True)
+            app = QuestionnaireAgentApp()
             
             # Verify that OTEL_SERVICE_NAME was set correctly
             self.assertEqual(os.environ.get("OTEL_SERVICE_NAME"), "Questionnaire Agent V2")
@@ -73,7 +73,7 @@ class TestSingleQuestionTracing(unittest.TestCase):
         os.environ["OTEL_SERVICE_NAME"] = custom_name
         
         # Import and initialize the application  
-        from question_answerer import QuestionnaireAgentUI
+        from question_answerer import QuestionnaireAgentApp
         
         # Mock Azure dependencies
         with patch('question_answerer.AIProjectClient') as mock_client, \
@@ -81,7 +81,7 @@ class TestSingleQuestionTracing(unittest.TestCase):
              patch('question_answerer.configure_azure_monitor') as mock_configure:
             
             # Initialize the application in headless mode
-            app = QuestionnaireAgentUI(headless_mode=True)
+            app = QuestionnaireAgentApp()
             
             # Verify that the existing OTEL_SERVICE_NAME was preserved
             self.assertEqual(os.environ.get("OTEL_SERVICE_NAME"), custom_name)
@@ -92,7 +92,7 @@ class TestSingleQuestionTracing(unittest.TestCase):
         if "APPLICATIONINSIGHTS_CONNECTION_STRING" in os.environ:
             del os.environ["APPLICATIONINSIGHTS_CONNECTION_STRING"]
         
-        from question_answerer import QuestionnaireAgentUI
+        from question_answerer import QuestionnaireAgentApp
         
         # Mock Azure dependencies
         with patch('question_answerer.AIProjectClient') as mock_client, \
@@ -100,7 +100,7 @@ class TestSingleQuestionTracing(unittest.TestCase):
              patch('question_answerer.configure_azure_monitor') as mock_configure:
             
             # Initialize the application in headless mode
-            app = QuestionnaireAgentUI(headless_mode=True)
+            app = QuestionnaireAgentApp()
             
             # Verify that OTEL_SERVICE_NAME is still set even without Application Insights
             self.assertEqual(os.environ.get("OTEL_SERVICE_NAME"), "Questionnaire Agent V2")
