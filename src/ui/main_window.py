@@ -242,11 +242,16 @@ class UIManager:
         self.reasoning_display = scrolledtext.ScrolledText(
             reasoning_frame,
             wrap=tk.WORD,
-            font=("Consolas", 10),  # Monospace font for technical output
+            font=("Segoe UI", 11),  # Changed to match other tabs
             state=tk.DISABLED,
-            bg="#f8f8f8"  # Light gray background
+            bg="white"  # White background for better readability
         )
         self.reasoning_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
+        
+        # Configure text tags for colored agent names
+        self.reasoning_display.tag_configure("agent_name_black", foreground="black", font=("Segoe UI", 11, "bold"))
+        self.reasoning_display.tag_configure("agent_name_green", foreground="green", font=("Segoe UI", 11, "bold"))
+        self.reasoning_display.tag_configure("agent_name_blue", foreground="blue", font=("Segoe UI", 11, "bold"))
     
     def _setup_event_handlers(self) -> None:
         """Set up keyboard and window event handlers."""
@@ -552,6 +557,11 @@ class UIManager:
         try:
             if result.success and result.answer:
                 self.update_reasoning("Question processing completed successfully!")
+                
+                # Display rich text conversation from agent steps
+                if result.answer.agent_reasoning:
+                    self._display_agent_conversation(result.answer.agent_reasoning)
+                
                 self.display_answer(result.answer.content, result.answer.sources)
                 self.status_manager.set_status(f"Processing completed successfully in {result.processing_time:.1f}s", "success")
             else:
@@ -871,6 +881,63 @@ class UIManager:
             logger.info(f"UI Reasoning: {message}")
         except Exception as e:
             logger.error(f"Error updating reasoning display: {e}")
+    
+    def _display_agent_conversation(self, agent_steps: list) -> None:
+        """Display agent conversation in rich text format.
+        
+        Args:
+            agent_steps: List of AgentStep objects from the workflow.
+        """
+        try:
+            from utils.reasoning_formatter import ReasoningFormatter
+            
+            # Format the agent steps
+            formatted_steps = ReasoningFormatter.format_agent_steps(agent_steps)
+            
+            if not formatted_steps:
+                return
+            
+            # Update on main thread
+            self.root.after(0, self._render_agent_conversation, formatted_steps)
+            
+        except Exception as e:
+            logger.error(f"Error displaying agent conversation: {e}", exc_info=True)
+    
+    def _render_agent_conversation(self, formatted_steps: list) -> None:
+        """Render the formatted agent conversation in the reasoning display.
+        
+        Args:
+            formatted_steps: List of (agent_name, content, color) tuples.
+        """
+        try:
+            if not self.reasoning_display:
+                logger.warning("Reasoning display not available")
+                return
+            
+            self.reasoning_display.config(state=tk.NORMAL)
+            
+            # Add a separator before the conversation
+            self.reasoning_display.insert(tk.END, "\n" + "="*80 + "\n")
+            self.reasoning_display.insert(tk.END, "Agent Conversation:\n")
+            self.reasoning_display.insert(tk.END, "="*80 + "\n\n")
+            
+            # Render each agent step
+            for agent_name, content, color in formatted_steps:
+                # Map color to tag name
+                tag_name = f"agent_name_{color}"
+                
+                # Insert agent name in bold and colored
+                self.reasoning_display.insert(tk.END, f"**{agent_name}:** ", tag_name)
+                
+                # Insert content in normal text
+                self.reasoning_display.insert(tk.END, f"{content}\n\n")
+            
+            # Auto-scroll to bottom
+            self.reasoning_display.see(tk.END)
+            self.reasoning_display.config(state=tk.DISABLED)
+            
+        except Exception as e:
+            logger.error(f"Error rendering agent conversation: {e}", exc_info=True)
     
     def _clear_reasoning_display(self) -> None:
         """Clear the reasoning display (main thread only)."""
