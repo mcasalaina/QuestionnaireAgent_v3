@@ -307,7 +307,8 @@ class UIManager:
         
         # Clear reasoning display
         self._clear_reasoning_display()
-        self.update_reasoning(f"Starting single question processing: '{question_text[:100]}...'")
+        context = self.context_var.get()
+        self.update_reasoning(f"Starting single question processing with context '{context}': '{question_text[:100]}...'")
         
         # Disable UI during processing
         self._set_processing_state(True)
@@ -473,8 +474,6 @@ class UIManager:
     
     async def _process_question_internal(self, question_text: str) -> ProcessingResult:
         """Internal async question processing."""
-        self.update_reasoning(f"Processing question: '{question_text[:100]}...'")
-        
         # Ensure agent coordinator is available (wait if initializing)
         try:
             await self._ensure_agents_ready()
@@ -495,8 +494,6 @@ class UIManager:
             char_limit=self.char_limit_var.get(),
             max_retries=self.max_retries_var.get()
         )
-        
-        self.update_reasoning(f"Question object created with context: {self.context_var.get()}")
         
         # Process with progress updates
         return await self.agent_coordinator.process_question(question, self.update_progress, self.update_reasoning)
@@ -925,9 +922,6 @@ class UIManager:
                 return
             
             self.reasoning_display.config(state=tk.NORMAL)
-            
-            # Add a separator before the conversation
-            self.reasoning_display.insert(tk.END, "\n" + "="*80 + "\n\n")
             
             # Render each agent step
             for agent_name, content, color in formatted_steps:

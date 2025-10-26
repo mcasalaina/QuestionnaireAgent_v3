@@ -154,10 +154,6 @@ class AgentCoordinator:
                         raise AgentExecutionError("No output received from workflow")
                     
                     workflow_result = outputs[0]
-                    verbose_msg = f"Retrieved workflow result: {workflow_result.keys() if isinstance(workflow_result, dict) else type(workflow_result)}"
-                    logger.info(verbose_msg)
-                    if reasoning_callback:
-                        reasoning_callback(verbose_msg)
                     
                     # Check if processing was successful
                     if workflow_result.get("processing_complete", False):
@@ -166,11 +162,6 @@ class AgentCoordinator:
                         if validation_status == ValidationStatus.APPROVED:
                             # Success - create approved answer
                             processing_time = time.time() - start_time
-                            
-                            verbose_msg = f"Answer approved! Processing time: {processing_time:.2f}s"
-                            logger.info(verbose_msg)
-                            if reasoning_callback:
-                                reasoning_callback(verbose_msg)
                             
                             answer = Answer(
                                 content=workflow_result["raw_answer"],
