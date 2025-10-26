@@ -35,7 +35,7 @@ class TestSelfReferentialLanguage:
         source = inspect.getsource(QuestionAnswererExecutor._get_agent)
         
         # Verify the instructions contain prohibitions against self-referential language
-        assert "NEVER refer to yourself" in source or "NOT refer to yourself" in source
+        assert "NEVER refer to yourself" in source
         assert "I am an AI" in source  # Should mention as an example of what NOT to do
         assert "first-person" in source or "first person" in source
         assert "self-referential" in source
