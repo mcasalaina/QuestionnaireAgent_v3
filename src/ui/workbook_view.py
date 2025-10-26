@@ -42,6 +42,10 @@ class WorkbookView:
         self.sheet_frames: List[ttk.Frame] = []
         self.is_polling = False
         self.poll_after_id: Optional[str] = None
+        
+        # Configure custom style for workbook notebook to position tabs at bottom
+        style = ttk.Style()
+        style.configure('WorkbookNotebook.TNotebook', tabposition='s')  # 's' = south (bottom)
     
     def render(self) -> ttk.Notebook:
         """Create notebook with all sheet tabs.
@@ -49,11 +53,7 @@ class WorkbookView:
         Returns:
             Configured Notebook widget ready for display
         """
-        # Create a custom style for this notebook to position tabs at bottom
-        style = ttk.Style()
-        style.configure('WorkbookNotebook.TNotebook', tabposition='s')  # 's' = south (bottom)
-        
-        # Create notebook widget with custom style
+        # Create notebook widget with custom style (configured in __init__)
         self.notebook = ttk.Notebook(self.parent, style='WorkbookNotebook.TNotebook')
         
         # Create a frame and SpreadsheetView for each sheet
