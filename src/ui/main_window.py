@@ -7,7 +7,7 @@ import asyncio
 import queue
 from typing import Optional, Callable, Any
 import logging
-from utils.data_types import Question, ProcessingResult, ExcelProcessingResult, WorkbookData
+from utils.data_types import Question, ProcessingResult, ExcelProcessingResult, WorkbookData, AgentInitState
 from utils.exceptions import (
     AzureServiceError, NetworkError, AuthenticationError, 
     ConfigurationError, ExcelFormatError
@@ -30,6 +30,11 @@ from .workbook_view import WorkbookView
 logger = logging.getLogger(__name__)
 
 
+# Agent initialization constants
+AGENT_INIT_MAX_WAIT_SECONDS = 120  # Maximum time to wait for agent initialization
+AGENT_INIT_POLL_INTERVAL = 0.5  # How often to check initialization status (seconds)
+
+
 class UIManager:
     """Main GUI interface for the questionnaire application."""
     
@@ -40,6 +45,11 @@ class UIManager:
             agent_coordinator: Pre-initialized agent coordinator (optional).
         """
         self.agent_coordinator = agent_coordinator
+        
+        # Agent initialization state tracking
+        self.agent_init_state = AgentInitState.NOT_STARTED
+        self.agent_init_error: Optional[str] = None
+        self.agent_init_future = None
         
         # Enable high DPI awareness on Windows for better rendering
         try:
@@ -100,6 +110,22 @@ class UIManager:
         style = ttk.Style()
         style.theme_use('clam')
         
+        # Set lighter background color for the window
+        light_gray = "#ebebeb"
+        self.root.configure(bg=light_gray)
+        style.configure("TFrame", background=light_gray)
+        style.configure("TLabel", background=light_gray)
+        style.configure("TLabelframe", background=light_gray)
+        style.configure("TLabelframe.Label", background=light_gray)
+        style.configure("TNotebook", background=light_gray)
+        # Configure tab colors: inactive tabs darker, active tab very light
+        style.configure("TNotebook.Tab", background="#d0d0d0", foreground="black")
+        style.map("TNotebook.Tab", 
+                  background=[("selected", "#ffffff")],
+                  foreground=[("selected", "black")])
+        style.configure("TPanedwindow", background=light_gray)
+        style.configure("Sash", sashthickness=5, background=light_gray)
+        
         # Create main paned window for left/right split
         main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         main_paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 0))
@@ -142,27 +168,23 @@ class UIManager:
         limit_label = ttk.Label(parent, text="Character Limit")
         limit_label.pack(anchor=tk.W, pady=(0, 5))
         
-        char_limit_spinbox = ttk.Spinbox(
+        char_limit_entry = ttk.Entry(
             parent,
-            from_=100,
-            to=10000,
             textvariable=self.char_limit_var,
             width=40
         )
-        char_limit_spinbox.pack(fill=tk.X, pady=(0, 15))
+        char_limit_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Maximum Retries section
         retries_label = ttk.Label(parent, text="Maximum Retries")
         retries_label.pack(anchor=tk.W, pady=(0, 5))
         
-        retries_spinbox = ttk.Spinbox(
+        retries_entry = ttk.Entry(
             parent,
-            from_=1,
-            to=25,
             textvariable=self.max_retries_var,
             width=40
         )
-        retries_spinbox.pack(fill=tk.X, pady=(0, 15))
+        retries_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Question section
         question_label = ttk.Label(parent, text="Question")
@@ -448,20 +470,18 @@ class UIManager:
         """Internal async question processing."""
         self.update_reasoning(f"Processing question: '{question_text[:100]}...'")
         
-        # Ensure agent coordinator is available
-        if not self.agent_coordinator:
-            self.update_reasoning("Initializing Azure AI agents... (this may take 30-60 seconds)")
-            
-            # Lazy import to avoid slow startup
-            from utils.azure_auth import get_azure_client
-            
-            azure_client = await get_azure_client()
-            bing_connection_id = config_manager.get_bing_connection_id()
-            
-            from agents.workflow_manager import create_agent_coordinator
-            self.agent_coordinator = await create_agent_coordinator(azure_client, bing_connection_id)
-            
-            self.update_reasoning("Azure AI agents initialized successfully")
+        # Ensure agent coordinator is available (wait if initializing)
+        try:
+            await self._ensure_agents_ready()
+        except Exception as e:
+            logger.error(f"Failed to ensure agents ready: {e}")
+            return ProcessingResult(
+                success=False,
+                error_message=f"Agent initialization failed: {str(e)}",
+                processing_time=0.0,
+                questions_processed=0,
+                questions_failed=1
+            )
         
         # Create question object
         question = Question(
@@ -484,20 +504,19 @@ class UIManager:
             
             self.update_reasoning("Starting agent initialization and question processing...")
             
-            # Step 1: Ensure agent coordinator is available
-            if not self.agent_coordinator:
-                self.update_reasoning("Initializing Azure AI agents... (this may take 30-60 seconds)")
-                
-                # Lazy import to avoid slow startup
-                from utils.azure_auth import get_azure_client
-                azure_client = await get_azure_client()
-                bing_connection_id = config_manager.get_bing_connection_id()
-                
-                from agents.workflow_manager import create_agent_coordinator
-                self.agent_coordinator = await create_agent_coordinator(azure_client, bing_connection_id)
-                self.update_reasoning("Azure AI agents initialized successfully")
+            # Ensure agent coordinator is available (wait if initializing)
+            try:
+                await self._ensure_agents_ready()
+            except Exception as e:
+                logger.error(f"Failed to ensure agents ready: {e}")
+                return ExcelProcessingResult(
+                    success=False,
+                    error_message=f"Agent initialization failed: {str(e)}",
+                    questions_processed=0,
+                    questions_failed=0
+                )
             
-            # Step 2: Process workbook (import ExcelProcessor lazily)
+            # Process workbook (import ExcelProcessor lazily)
             self.update_reasoning("Starting question processing...")
             from excel.processor import ExcelProcessor
             processor = ExcelProcessor(self.agent_coordinator, self.ui_update_queue, self.update_reasoning)
@@ -508,7 +527,7 @@ class UIManager:
                 self.max_retries_var.get()
             )
             
-            # Step 3: Save workbook if successful
+            # Save workbook if successful
             if result.success:
                 self.update_reasoning("Saving results back to Excel file...")
                 loader = ExcelLoader()
@@ -773,19 +792,6 @@ class UIManager:
         # Implementation will be completed in User Story 2
         return asyncio.run(self._process_excel_internal(file_path))
     
-    def update_reasoning(self, message: str) -> None:
-        """Update the reasoning display with agent processing details.
-        
-        Args:
-            message: Reasoning message to display.
-        """
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        formatted_message = f"[{timestamp}] {message}\n"
-        
-        # Update on main thread
-        self.root.after(0, self._append_reasoning_text, formatted_message)
-    
     def _append_reasoning_text(self, text: str) -> None:
         """Append text to reasoning display (main thread only).
         
@@ -940,9 +946,140 @@ class UIManager:
         except Exception as e:
             logger.warning(f"Error shutting down asyncio runner: {e}")
     
+    def _start_agent_initialization(self) -> None:
+        """Start agent initialization asynchronously in background."""
+        if self.agent_coordinator or self.agent_init_state != AgentInitState.NOT_STARTED:
+            # Already have coordinator or initialization already started/completed
+            return
+        
+        logger.info("Starting background agent initialization...")
+        self.agent_init_state = AgentInitState.IN_PROGRESS
+        self.status_manager.set_status("Initializing agents in background...", "info")
+        self.update_reasoning("Starting agent initialization in background...")
+        
+        # Start async initialization in background thread
+        threading.Thread(
+            target=self._initialize_agents_async,
+            daemon=True
+        ).start()
+    
+    def _initialize_agents_async(self) -> None:
+        """Initialize agents asynchronously in background thread."""
+        try:
+            # Use the asyncio thread runner
+            self.asyncio_runner.run_coroutine(
+                self._create_agent_coordinator(),
+                callback=lambda result: self.root.after(0, self._handle_agent_init_success, result),
+                error_callback=lambda e: self.root.after(0, self._handle_agent_init_error, e)
+            )
+        except Exception as e:
+            logger.error(f"Error starting agent initialization: {e}", exc_info=True)
+            self.root.after(0, self._handle_agent_init_error, e)
+    
+    async def _create_agent_coordinator(self):
+        """Create agent coordinator with proper initialization."""
+        self.update_reasoning("Initializing Azure AI agents... (this may take 30-60 seconds)")
+        
+        # Lazy import to avoid slow startup
+        from utils.azure_auth import get_azure_client
+        
+        azure_client = await get_azure_client()
+        bing_connection_id = config_manager.get_bing_connection_id()
+        
+        from agents.workflow_manager import create_agent_coordinator
+        coordinator = await create_agent_coordinator(azure_client, bing_connection_id)
+        
+        self.update_reasoning("Azure AI agents initialized successfully")
+        return coordinator
+    
+    def _handle_agent_init_success(self, coordinator) -> None:
+        """Handle successful agent initialization on main thread."""
+        self.agent_coordinator = coordinator
+        self.agent_init_state = AgentInitState.COMPLETED
+        self.status_manager.set_status("Ready - Agents initialized", "success")
+        self.update_reasoning("✅ Agent initialization completed - ready to process questions")
+        logger.info("Agent initialization completed successfully")
+    
+    def _handle_agent_init_error(self, error: Exception) -> None:
+        """Handle agent initialization error on main thread."""
+        self.agent_init_state = AgentInitState.FAILED
+        self.agent_init_error = str(error)
+        self.status_manager.set_status("Agent initialization failed", "error")
+        self.update_reasoning(f"❌ Agent initialization failed: {error}")
+        logger.error(f"Agent initialization failed: {error}", exc_info=True)
+
+    
+    async def _ensure_agents_ready(self) -> None:
+        """Ensure agents are initialized, waiting if necessary.
+        
+        Raises:
+            Exception: If agent initialization failed.
+        """
+        if self.agent_coordinator:
+            # Already initialized
+            return
+        
+        if self.agent_init_state == AgentInitState.COMPLETED:
+            # Should have coordinator but don't - this is unexpected
+            if not self.agent_coordinator:
+                logger.warning("Agent init state is 'completed' but no coordinator - reinitializing")
+                self.agent_init_state = AgentInitState.NOT_STARTED
+        
+        if self.agent_init_state == AgentInitState.FAILED:
+            # Previous initialization failed - raise error
+            error_msg = f"Agent initialization previously failed: {self.agent_init_error}"
+            raise Exception(error_msg)
+        
+        if self.agent_init_state == AgentInitState.NOT_STARTED:
+            # Not started yet - start now and wait
+            self.update_reasoning("Agents not yet initialized - starting initialization now...")
+            await self._create_agent_coordinator_sync()
+            return
+        
+        if self.agent_init_state == AgentInitState.IN_PROGRESS:
+            # Initialization in progress - wait for it to complete
+            self.update_reasoning("Waiting for agent initialization to complete...")
+            logger.info("Waiting for agent initialization to complete...")
+            
+            # Poll until initialization completes or fails
+            elapsed = 0.0
+            
+            while self.agent_init_state == AgentInitState.IN_PROGRESS and elapsed < AGENT_INIT_MAX_WAIT_SECONDS:
+                await asyncio.sleep(AGENT_INIT_POLL_INTERVAL)
+                elapsed += AGENT_INIT_POLL_INTERVAL
+            
+            if self.agent_init_state == AgentInitState.COMPLETED:
+                if self.agent_coordinator:
+                    self.update_reasoning("✅ Agent initialization completed")
+                    return
+                else:
+                    # State is completed but no coordinator - shouldn't happen
+                    raise Exception("Agent initialization completed but coordinator not available")
+            elif self.agent_init_state == AgentInitState.FAILED:
+                raise Exception(f"Agent initialization failed: {self.agent_init_error}")
+            else:
+                # Timed out waiting
+                raise Exception(f"Timed out waiting for agent initialization after {AGENT_INIT_MAX_WAIT_SECONDS}s")
+    
+    async def _create_agent_coordinator_sync(self):
+        """Create agent coordinator synchronously (blocking)."""
+        self.agent_init_state = AgentInitState.IN_PROGRESS
+        try:
+            coordinator = await self._create_agent_coordinator()
+            self.agent_coordinator = coordinator
+            self.agent_init_state = AgentInitState.COMPLETED
+        except Exception as e:
+            self.agent_init_state = AgentInitState.FAILED
+            self.agent_init_error = str(e)
+            raise
+    
     def run(self) -> None:
         """Start the GUI event loop."""
         logger.info("Starting GUI application")
         self.status_manager.set_status("Ready", "info")
         self.question_entry.focus()
+        
+        # Start agent initialization in background
+        self._start_agent_initialization()
+        
         self.root.mainloop()
