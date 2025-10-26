@@ -775,19 +775,6 @@ class UIManager:
         # Implementation will be completed in User Story 2
         return asyncio.run(self._process_excel_internal(file_path))
     
-    def update_reasoning(self, message: str) -> None:
-        """Update the reasoning display with agent processing details.
-        
-        Args:
-            message: Reasoning message to display.
-        """
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        formatted_message = f"[{timestamp}] {message}\n"
-        
-        # Update on main thread
-        self.root.after(0, self._append_reasoning_text, formatted_message)
-    
     def _append_reasoning_text(self, text: str) -> None:
         """Append text to reasoning display (main thread only).
         
