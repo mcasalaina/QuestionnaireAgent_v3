@@ -108,7 +108,11 @@ class UIManager:
         style.configure("TLabelframe", background=light_gray)
         style.configure("TLabelframe.Label", background=light_gray)
         style.configure("TNotebook", background=light_gray)
-        style.configure("TNotebook.Tab", background=light_gray)
+        # Configure tab colors: inactive tabs darker, active tab very light
+        style.configure("TNotebook.Tab", background="#d0d0d0", foreground="black")
+        style.map("TNotebook.Tab", 
+                  background=[("selected", "#ffffff")],
+                  foreground=[("selected", "black")])
         style.configure("TPanedwindow", background=light_gray)
         style.configure("Sash", sashthickness=5, background=light_gray)
         
