@@ -327,6 +327,9 @@ class SheetData:
     cell_states: List[CellState]
     is_processing: bool = False
     is_complete: bool = False
+    question_col_index: Optional[int] = None
+    response_col_index: Optional[int] = None
+    documentation_col_index: Optional[int] = None
     
     def __post_init__(self):
         """Validate invariants."""

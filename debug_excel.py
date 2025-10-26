@@ -13,16 +13,18 @@ sys.path.insert(0, str(src_path))
 def test_excel_loading():
     """Test Excel loading step by step."""
     try:
-        print("1. Testing Excel loader import...")
+        print("1. Testing Excel loader and column identifier import...")
         from excel.loader import ExcelLoader
-        print("   ✓ ExcelLoader imported successfully")
+        from excel.column_identifier import ColumnIdentifier
+        print("   ✓ ExcelLoader and ColumnIdentifier imported successfully")
         
         print("2. Testing WorkbookData import...")
         from utils.data_types import WorkbookData
         print("   ✓ WorkbookData imported successfully")
         
-        print("3. Testing Excel file loading...")
-        loader = ExcelLoader()
+        print("3. Testing Excel file loading with column identification...")
+        column_identifier = ColumnIdentifier(azure_client=None)
+        loader = ExcelLoader(column_identifier=column_identifier)
         
         # Use the test file we created earlier
         test_file = "test_files/sample_questions.xlsx"
