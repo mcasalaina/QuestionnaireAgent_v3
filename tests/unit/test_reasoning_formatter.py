@@ -8,7 +8,7 @@ src_path = os.path.join(os.path.dirname(__file__), '..', '..', 'src')
 sys.path.insert(0, src_path)
 
 import pytest
-from utils.data_types import AgentStep, AgentType, StepStatus
+from utils.data_types import AgentStep, AgentType, StepStatus, DocumentationLink
 from utils.reasoning_formatter import ReasoningFormatter
 
 
@@ -73,8 +73,8 @@ def test_format_answer_checker_reject():
     assert color == "green"
 
 
-def test_format_link_checker_step():
-    """Test formatting of Link Checker step."""
+def test_format_link_checker_with_links():
+    """Test formatting of Link Checker step with documentation links."""
     step = AgentStep(
         agent_name=AgentType.LINK_CHECKER,
         input_data="Links to check: ['https://example.com']",
@@ -83,14 +83,57 @@ def test_format_link_checker_step():
         status=StepStatus.SUCCESS
     )
     
+    # Create documentation links with validation results
+    doc_links = [
+        DocumentationLink(
+            url="https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support",
+            is_reachable=True,
+            is_relevant=True,
+            http_status=200
+        ),
+        DocumentationLink(
+            url="https://boguslink.com/bogus",
+            is_reachable=False,
+            is_relevant=False,
+            http_status=404
+        )
+    ]
+    
+    formatted = ReasoningFormatter.format_agent_steps([step], doc_links)
+    
+    # Should have one entry per link
+    assert len(formatted) == 2
+    
+    # First link should be working
+    agent_name, content, color = formatted[0]
+    assert agent_name == "Link Checker"
+    assert "WORKING LINK" in content
+    assert "learn.microsoft.com" in content
+    assert color == "blue"
+    
+    # Second link should be failed
+    agent_name, content, color = formatted[1]
+    assert agent_name == "Link Checker"
+    assert "FAILED LINK" in content
+    assert "boguslink.com" in content
+    assert color == "blue"
+
+
+def test_format_link_checker_without_links():
+    """Test formatting of Link Checker step without documentation links."""
+    step = AgentStep(
+        agent_name=AgentType.LINK_CHECKER,
+        input_data="Links to check: []",
+        output_data="No links to check.",
+        execution_time=0.1,
+        status=StepStatus.SUCCESS
+    )
+    
+    # No documentation links provided
     formatted = ReasoningFormatter.format_agent_steps([step])
     
-    assert len(formatted) == 1
-    agent_name, content, color = formatted[0]
-    
-    assert agent_name == "Link Checker"
-    assert "LINKS_VALID" in content
-    assert color == "blue"
+    # Should be empty since Link Checker with no links has nothing to show
+    assert len(formatted) == 0
 
 
 def test_format_multiple_steps():

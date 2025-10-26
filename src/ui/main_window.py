@@ -560,7 +560,10 @@ class UIManager:
                 
                 # Display rich text conversation from agent steps
                 if result.answer.agent_reasoning:
-                    self._display_agent_conversation(result.answer.agent_reasoning)
+                    self._display_agent_conversation(
+                        result.answer.agent_reasoning,
+                        result.answer.documentation_links
+                    )
                 
                 self.display_answer(result.answer.content, result.answer.sources)
                 self.status_manager.set_status(f"Processing completed successfully in {result.processing_time:.1f}s", "success")
@@ -882,17 +885,18 @@ class UIManager:
         except Exception as e:
             logger.error(f"Error updating reasoning display: {e}")
     
-    def _display_agent_conversation(self, agent_steps: list) -> None:
+    def _display_agent_conversation(self, agent_steps: list, documentation_links: list = None) -> None:
         """Display agent conversation in rich text format.
         
         Args:
             agent_steps: List of AgentStep objects from the workflow.
+            documentation_links: Optional list of DocumentationLink objects.
         """
         try:
             from utils.reasoning_formatter import ReasoningFormatter
             
             # Format the agent steps
-            formatted_steps = ReasoningFormatter.format_agent_steps(agent_steps)
+            formatted_steps = ReasoningFormatter.format_agent_steps(agent_steps, documentation_links)
             
             if not formatted_steps:
                 return

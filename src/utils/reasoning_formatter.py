@@ -1,7 +1,7 @@
 """Formatter for rendering agent reasoning as rich text conversations."""
 
-from typing import List, Tuple
-from utils.data_types import AgentStep, AgentType
+from typing import List, Tuple, Optional
+from utils.data_types import AgentStep, AgentType, DocumentationLink
 
 
 class ReasoningFormatter:
@@ -22,11 +22,12 @@ class ReasoningFormatter:
     }
     
     @staticmethod
-    def format_agent_steps(agent_steps: List[AgentStep]) -> List[Tuple[str, str, str]]:
+    def format_agent_steps(agent_steps: List[AgentStep], documentation_links: Optional[List[DocumentationLink]] = None) -> List[Tuple[str, str, str]]:
         """Format agent steps as a list of (agent_name, content, color) tuples.
         
         Args:
             agent_steps: List of agent execution steps from the workflow.
+            documentation_links: Optional list of documentation links with validation status.
             
         Returns:
             List of tuples containing:
@@ -41,10 +42,16 @@ class ReasoningFormatter:
             color = ReasoningFormatter.AGENT_COLORS.get(step.agent_name, "black")
             
             # Get the content from the agent's output
-            content = ReasoningFormatter._extract_content(step)
-            
-            if content:
-                formatted_steps.append((agent_name, content, color))
+            if step.agent_name == AgentType.LINK_CHECKER and documentation_links:
+                # For Link Checker, generate multiple entries (one per link)
+                link_entries = ReasoningFormatter._format_link_checker_links(documentation_links)
+                for link_content in link_entries:
+                    formatted_steps.append((agent_name, link_content, color))
+            else:
+                # For other agents, format normally
+                content = ReasoningFormatter._extract_content(step)
+                if content:
+                    formatted_steps.append((agent_name, content, color))
         
         return formatted_steps
     
@@ -83,26 +90,28 @@ class ReasoningFormatter:
                 return "REJECT."
             return output_data
         
-        # For Link Checker: extract link status
+        # For Link Checker: this should not be called since we handle it separately
         if step.agent_name == AgentType.LINK_CHECKER:
-            return ReasoningFormatter._format_link_checker_output(output_data)
+            return ""
         
         return output_data
     
     @staticmethod
-    def _format_link_checker_output(output_data: str) -> str:
+    def _format_link_checker_links(documentation_links: List[DocumentationLink]) -> List[str]:
         """Format link checker output to show individual link statuses.
         
-        The Link Checker output contains validation results for links.
-        We need to extract and format them as shown in the issue example.
-        
         Args:
-            output_data: The raw output from the link checker.
+            documentation_links: List of documentation links with validation status.
             
         Returns:
-            Formatted link status messages.
+            List of formatted link status messages.
         """
-        # The output typically starts with "LINKS_VALID:" or "LINKS_INVALID:"
-        # For now, return the raw output as it may contain detailed link info
-        # We'll refine this based on actual output format when we test
-        return output_data
+        link_messages = []
+        
+        for link in documentation_links:
+            if link.is_reachable and link.is_relevant:
+                link_messages.append(f"WORKING LINK. {link.url}")
+            else:
+                link_messages.append(f"FAILED LINK. {link.url}")
+        
+        return link_messages
