@@ -142,27 +142,23 @@ class UIManager:
         limit_label = ttk.Label(parent, text="Character Limit")
         limit_label.pack(anchor=tk.W, pady=(0, 5))
         
-        char_limit_spinbox = ttk.Spinbox(
+        char_limit_entry = ttk.Entry(
             parent,
-            from_=100,
-            to=10000,
             textvariable=self.char_limit_var,
             width=40
         )
-        char_limit_spinbox.pack(fill=tk.X, pady=(0, 15))
+        char_limit_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Maximum Retries section
         retries_label = ttk.Label(parent, text="Maximum Retries")
         retries_label.pack(anchor=tk.W, pady=(0, 5))
         
-        retries_spinbox = ttk.Spinbox(
+        retries_entry = ttk.Entry(
             parent,
-            from_=1,
-            to=25,
             textvariable=self.max_retries_var,
             width=40
         )
-        retries_spinbox.pack(fill=tk.X, pady=(0, 15))
+        retries_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Question section
         question_label = ttk.Label(parent, text="Question")
