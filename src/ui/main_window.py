@@ -933,17 +933,15 @@ class UIManager:
             self.reasoning_display.config(state=tk.NORMAL)
             
             # Add a separator before the conversation
-            self.reasoning_display.insert(tk.END, "\n" + "="*80 + "\n")
-            self.reasoning_display.insert(tk.END, "Agent Conversation:\n")
-            self.reasoning_display.insert(tk.END, "="*80 + "\n\n")
+            self.reasoning_display.insert(tk.END, "\n" + "="*80 + "\n\n")
             
             # Render each agent step
             for agent_name, content, color in formatted_steps:
                 # Map color to tag name
                 tag_name = f"agent_name_{color}"
                 
-                # Insert agent name in bold and colored
-                self.reasoning_display.insert(tk.END, f"**{agent_name}:** ", tag_name)
+                # Insert agent name in bold and colored (without asterisks)
+                self.reasoning_display.insert(tk.END, f"{agent_name}: ", tag_name)
                 
                 # Insert content in normal text
                 self.reasoning_display.insert(tk.END, f"{content}\n\n")
