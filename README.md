@@ -32,6 +32,13 @@ If either checker rejects the answer, the Question Answerer reformulates and the
 - Azure CLI installed and authenticated (`az login`)
 - Bing Search resource connected to your AI Foundry project
 
+**Note:** The application will test your Azure authentication immediately on startup. If you're not logged in, it will automatically trigger an interactive browser login flow. Make sure you're logged in before starting the application using one of these methods:
+
+1. Run `az login` in your terminal (recommended)
+2. Sign in through Visual Studio Code
+3. Allow the interactive browser login when prompted
+4. Set up environment variables for service principal authentication
+
 ### Install Dependencies
 
 ```bash
