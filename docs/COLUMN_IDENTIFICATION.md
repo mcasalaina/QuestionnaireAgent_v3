@@ -34,27 +34,30 @@ The heuristic identifier recognizes common column header patterns:
 ## Examples
 
 ### Example 1: Standard Format
-```
 | Status | Owner | Q# | Question | Response | Documentation |
-```
+|--------|-------|----|-----------|-----------|--------------------|
+| ...    | ...   | .. | ...       | (empty)   | (empty)            |
+
 **Identified as:**
 - Question: Column D (index 3)
 - Response: Column E (index 4)
 - Documentation: Column F (index 5)
 
 ### Example 2: Simple Format
-```
 | Question | Answer |
-```
+|----------|--------|
+| ...      | (empty)|
+
 **Identified as:**
 - Question: Column A (index 0)
 - Response: Column B (index 1)
 - Documentation: None
 
 ### Example 3: Abbreviated Format
-```
-| Q | A | Docs |
-```
+| Q   | A       | Docs   |
+|-----|---------|--------|
+| ... | (empty) | (empty)|
+
 **Identified as:**
 - Question: Column A (index 0)
 - Response: Column B (index 1)
