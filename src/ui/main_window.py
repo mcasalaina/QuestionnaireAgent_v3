@@ -107,6 +107,8 @@ class UIManager:
         style.configure("TLabel", background=light_gray)
         style.configure("TLabelframe", background=light_gray)
         style.configure("TLabelframe.Label", background=light_gray)
+        style.configure("TNotebook", background=light_gray)
+        style.configure("TNotebook.Tab", background=light_gray)
         
         # Create main paned window for left/right split
         main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
