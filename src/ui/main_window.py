@@ -16,6 +16,7 @@ from utils.logger import setup_logging
 from utils.ui_queue import UIUpdateQueue
 from utils.asyncio_runner import get_asyncio_runner, shutdown_asyncio_runner
 from excel.loader import ExcelLoader
+from excel.column_identifier import ColumnIdentifier
 # Import ExcelProcessor lazily to avoid slow agent framework imports
 # from excel.processor import ExcelProcessor
 # Import AgentCoordinator lazily to avoid slow startup
@@ -426,11 +427,13 @@ class UIManager:
             self._clear_reasoning_display()
             self.update_reasoning("Loading Excel file...")
             
-            # Load workbook
+            # Load workbook with column identification
             self.status_manager.set_status("Loading Excel file...", "info")
             self.update_reasoning(f"Loading Excel file: {file_path}")
             
-            loader = ExcelLoader()
+            # Create column identifier (uses heuristics for now, can be upgraded to use AI later)
+            column_identifier = ColumnIdentifier(azure_client=None)
+            loader = ExcelLoader(column_identifier=column_identifier)
             workbook_data = loader.load_workbook(file_path)
             
             # Create UI update queue
@@ -532,7 +535,8 @@ class UIManager:
             # Save workbook if successful
             if result.success:
                 self.update_reasoning("Saving results back to Excel file...")
-                loader = ExcelLoader()
+                column_identifier = ColumnIdentifier(azure_client=None)
+                loader = ExcelLoader(column_identifier=column_identifier)
                 loader.save_workbook(workbook_data)
                 self.update_reasoning(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
                 logger.info(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
