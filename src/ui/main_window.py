@@ -110,6 +110,22 @@ class UIManager:
         style = ttk.Style()
         style.theme_use('clam')
         
+        # Set lighter background color for the window
+        light_gray = "#ebebeb"
+        self.root.configure(bg=light_gray)
+        style.configure("TFrame", background=light_gray)
+        style.configure("TLabel", background=light_gray)
+        style.configure("TLabelframe", background=light_gray)
+        style.configure("TLabelframe.Label", background=light_gray)
+        style.configure("TNotebook", background=light_gray)
+        # Configure tab colors: inactive tabs darker, active tab very light
+        style.configure("TNotebook.Tab", background="#d0d0d0", foreground="black")
+        style.map("TNotebook.Tab", 
+                  background=[("selected", "#ffffff")],
+                  foreground=[("selected", "black")])
+        style.configure("TPanedwindow", background=light_gray)
+        style.configure("Sash", sashthickness=5, background=light_gray)
+        
         # Create main paned window for left/right split
         main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         main_paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 0))
@@ -152,27 +168,23 @@ class UIManager:
         limit_label = ttk.Label(parent, text="Character Limit")
         limit_label.pack(anchor=tk.W, pady=(0, 5))
         
-        char_limit_spinbox = ttk.Spinbox(
+        char_limit_entry = ttk.Entry(
             parent,
-            from_=100,
-            to=10000,
             textvariable=self.char_limit_var,
             width=40
         )
-        char_limit_spinbox.pack(fill=tk.X, pady=(0, 15))
+        char_limit_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Maximum Retries section
         retries_label = ttk.Label(parent, text="Maximum Retries")
         retries_label.pack(anchor=tk.W, pady=(0, 5))
         
-        retries_spinbox = ttk.Spinbox(
+        retries_entry = ttk.Entry(
             parent,
-            from_=1,
-            to=25,
             textvariable=self.max_retries_var,
             width=40
         )
-        retries_spinbox.pack(fill=tk.X, pady=(0, 15))
+        retries_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Question section
         question_label = ttk.Label(parent, text="Question")
