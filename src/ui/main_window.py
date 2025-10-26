@@ -5,6 +5,7 @@ from tkinter import ttk, scrolledtext, messagebox, filedialog
 import threading
 import asyncio
 import queue
+import os
 from typing import Optional, Callable, Any
 import logging
 from utils.data_types import Question, ProcessingResult, ExcelProcessingResult, WorkbookData, AgentInitState
@@ -534,7 +535,6 @@ class UIManager:
                 self.update_reasoning("Processing complete - prompting for save location...")
                 
                 # Generate default filename suggestion
-                import os
                 original_dir = os.path.dirname(workbook_data.file_path)
                 original_name = os.path.basename(workbook_data.file_path)
                 name_without_ext, ext = os.path.splitext(original_name)
@@ -569,16 +569,49 @@ class UIManager:
                 
                 output_path = self._save_dialog_result
                 
-                # If user cancelled the dialog, don't save
-                if not output_path:
-                    self.update_reasoning("Save cancelled by user")
-                    return ExcelProcessingResult(
-                        success=False,
-                        error_message="Save cancelled by user",
-                        questions_processed=result.questions_processed,
-                        questions_failed=result.questions_failed,
-                        processing_time=result.processing_time
-                    )
+                # If user cancelled the dialog, give them a chance to save
+                while not output_path:
+                    self.update_reasoning("Save cancelled - prompting user...")
+                    
+                    # Show warning on main thread
+                    retry_save = None
+                    def show_cancel_warning():
+                        nonlocal retry_save
+                        retry_save = messagebox.askyesno(
+                            "Save Required",
+                            "The questionnaire processing is complete.\n\n"
+                            "Please choose a location to save the results.\n\n"
+                            "Would you like to choose a save location now?",
+                            icon='warning'
+                        )
+                        self._save_dialog_completed = True
+                    
+                    self._save_dialog_completed = False
+                    self.root.after(0, show_cancel_warning)
+                    
+                    # Wait for response
+                    while not self._save_dialog_completed:
+                        await asyncio.sleep(0.1)
+                    
+                    if not retry_save:
+                        # User really doesn't want to save - treat as cancellation
+                        self.update_reasoning("Save cancelled by user")
+                        return ExcelProcessingResult(
+                            success=False,
+                            error_message="Save cancelled by user",
+                            questions_processed=result.questions_processed,
+                            questions_failed=result.questions_failed,
+                            processing_time=result.processing_time
+                        )
+                    
+                    # Show save dialog again
+                    self._save_dialog_completed = False
+                    self.root.after(0, show_save_dialog)
+                    
+                    while not self._save_dialog_completed:
+                        await asyncio.sleep(0.1)
+                    
+                    output_path = self._save_dialog_result
                 
                 self.update_reasoning(f"Saving results to: {output_path}")
                 loader = ExcelLoader()
