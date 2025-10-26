@@ -532,7 +532,12 @@ class UIManager:
             # Process workbook (import ExcelProcessor lazily)
             self.update_reasoning("Starting question processing...")
             from excel.processor import ExcelProcessor
-            processor = ExcelProcessor(self.agent_coordinator, self.ui_update_queue, self.update_reasoning)
+            processor = ExcelProcessor(
+                self.agent_coordinator, 
+                self.ui_update_queue, 
+                self.update_reasoning,
+                self._display_agent_conversation
+            )
             result = await processor.process_workbook(
                 workbook_data,
                 self.context_var.get(),
