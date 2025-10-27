@@ -68,9 +68,8 @@ The `cancel_processing()` method already existed and sets the `cancelled` flag. 
 
 ### Automated Tests
 
-Run the integration tests:
+Run the integration tests from the project root:
 ```bash
-cd /home/runner/work/QuestionnaireAgent_v3/QuestionnaireAgent_v3
 python3 tests/unit/test_stop_button.py
 ```
 
@@ -151,7 +150,7 @@ _set_processing_state(False) - restores normal UI state
 
 1. The Stop button cancels processing immediately, but:
    - The current question being processed may complete before stopping
-   - Any partially processed results are not saved
+   - Partially processed results (i.e., completed questions within the batch) are visible in the workbook view but are not automatically saved to a file unless the user chooses to save when prompted
    - The workbook view shows all questions that were completed before stopping
 
 2. The UI restoration happens when processing completes, not immediately when Stop is clicked. This is because:
