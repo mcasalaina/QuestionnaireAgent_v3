@@ -150,7 +150,7 @@ Sources:
 |-----------|---------------|------------------|
 | **Question Answerer** | Searches the web for evidence, synthesizes a candidate answer | Web search API |
 | **Answer Checker** | Validates factual correctness, completeness, and consistency | Web search API |
-| **Link Checker** | Verifies that every URL cited in the answer is reachable and relevant | HTTP requests + web search |
+| **Link Checker** | Verifies that every URL cited in the answer is reachable and relevant | Browser Automation tool |
 
 ### Workflow
 
@@ -186,6 +186,7 @@ The application requires the following environment variables to be set in your `
 | `AZURE_OPENAI_ENDPOINT` | Azure AI Foundry project endpoint | Azure AI Foundry Portal > Project Overview > Project Details |
 | `AZURE_OPENAI_MODEL_DEPLOYMENT` | Your deployed model name | Azure AI Foundry Portal > Models + Endpoints |
 | `BING_CONNECTION_ID` | Bing Search connection name | Azure AI Foundry Portal > Connected Resources |
+| `BROWSER_AUTOMATION_CONNECTION_ID` | Browser Automation connection name | Azure AI Foundry Portal > Connected Resources |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Application Insights connection string | Azure Portal > Application Insights > Overview |
 | `AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED` | Enable AI content tracing (optional) | Set to `true` or `false` |
 
@@ -195,6 +196,7 @@ The application requires the following environment variables to be set in your `
 AZURE_OPENAI_ENDPOINT=https://your-project.services.ai.azure.com/api/projects/your-project
 AZURE_OPENAI_MODEL_DEPLOYMENT=gpt-4.1
 BING_CONNECTION_ID=your-bing-connection-name
+BROWSER_AUTOMATION_CONNECTION_ID=your-browser-automation-connection-name
 APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=your-key;IngestionEndpoint=https://your-region.in.applicationinsights.azure.com/;LiveEndpoint=https://your-region.livediagnostics.monitor.azure.com/;ApplicationId=your-app-id
 AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED=true
 ```

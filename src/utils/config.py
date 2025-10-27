@@ -15,6 +15,7 @@ class AppConfig:
     azure_endpoint: str
     model_deployment: str
     bing_connection_id: str
+    browser_automation_connection_id: str
     app_insights_connection: Optional[str] = None
     
     # Application settings
@@ -71,6 +72,7 @@ class ConfigurationManager:
             azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", ""),
             model_deployment=os.getenv("AZURE_OPENAI_MODEL_DEPLOYMENT", "gpt-4.1"),
             bing_connection_id=os.getenv("BING_CONNECTION_ID", ""),
+            browser_automation_connection_id=os.getenv("BROWSER_AUTOMATION_CONNECTION_ID", ""),
             app_insights_connection=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
             max_retries=int(os.getenv("MAX_RETRIES", "10")),
             default_char_limit=int(os.getenv("DEFAULT_CHAR_LIMIT", "2000")),
@@ -100,6 +102,9 @@ class ConfigurationManager:
         
         if not self.config.bing_connection_id:
             errors.append("BING_CONNECTION_ID is required")
+        
+        if not self.config.browser_automation_connection_id:
+            errors.append("BROWSER_AUTOMATION_CONNECTION_ID is required")
         
         # Validate numeric settings
         if self.config.max_retries < 1 or self.config.max_retries > 25:
@@ -166,6 +171,14 @@ class ConfigurationManager:
             Connection ID for Bing search service.
         """
         return self.config.bing_connection_id
+    
+    def get_browser_automation_connection_id(self) -> str:
+        """Get the Browser Automation connection identifier.
+        
+        Returns:
+            Connection ID for Browser Automation service.
+        """
+        return self.config.browser_automation_connection_id
     
     def get_app_insights_connection(self) -> Optional[str]:
         """Get the Application Insights connection string.
