@@ -86,12 +86,15 @@ class UIManager:
         self.answer_display: Optional[scrolledtext.ScrolledText] = None
         self.sources_display: Optional[scrolledtext.ScrolledText] = None
         self.reasoning_display: Optional[scrolledtext.ScrolledText] = None
+        self.char_limit_entry: Optional[ttk.Entry] = None
+        self.max_retries_entry: Optional[ttk.Entry] = None
         
         # Excel processing components
         self.workbook_view: Optional[WorkbookView] = None
         self.ui_update_queue: Optional[UIUpdateQueue] = None
         self.current_workbook_data: Optional[WorkbookData] = None
         self._temp_workbook_data: Optional[WorkbookData] = None
+        self.current_excel_processor: Optional[Any] = None  # Store current processor for cancellation
         
         # Settings
         self.char_limit_var = tk.IntVar(value=initial_char_limit if initial_char_limit is not None else 2000)
@@ -181,23 +184,23 @@ class UIManager:
         limit_label = ttk.Label(parent, text="Character Limit")
         limit_label.pack(anchor=tk.W, pady=(0, 5))
         
-        char_limit_entry = ttk.Entry(
+        self.char_limit_entry = ttk.Entry(
             parent,
             textvariable=self.char_limit_var,
             width=40
         )
-        char_limit_entry.pack(fill=tk.X, pady=(0, 15))
+        self.char_limit_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Maximum Retries section
         retries_label = ttk.Label(parent, text="Maximum Retries")
         retries_label.pack(anchor=tk.W, pady=(0, 5))
         
-        retries_entry = ttk.Entry(
+        self.max_retries_entry = ttk.Entry(
             parent,
             textvariable=self.max_retries_var,
             width=40
         )
-        retries_entry.pack(fill=tk.X, pady=(0, 15))
+        self.max_retries_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Question section
         question_label = ttk.Label(parent, text="Question")
@@ -249,12 +252,12 @@ class UIManager:
         )
         self.answer_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Documentation tab
-        docs_frame = ttk.Frame(self.results_notebook)
-        self.results_notebook.add(docs_frame, text="Documentation")
+        # Documentation tab (store reference to the frame)
+        self.docs_frame = ttk.Frame(self.results_notebook)
+        self.results_notebook.add(self.docs_frame, text="Documentation")
         
         self.sources_display = scrolledtext.ScrolledText(
-            docs_frame,
+            self.docs_frame,
             wrap=tk.WORD,
             font=("Segoe UI", 12),
             state=tk.DISABLED
@@ -344,7 +347,7 @@ class UIManager:
                 self._load_and_display_excel_sync(file_path)
                 
                 # Then start async processing in background
-                self._set_processing_state(True)
+                self._set_processing_state(True, is_spreadsheet=True)
                 self._start_async_excel_processing(file_path)
                 
             except Exception as e:
@@ -545,6 +548,9 @@ class UIManager:
                 self.update_reasoning,
                 self._display_agent_conversation
             )
+            # Store processor reference for cancellation
+            self.current_excel_processor = processor
+            
             result = await processor.process_workbook(
                 workbook_data,
                 self.context_var.get(),
@@ -681,6 +687,9 @@ class UIManager:
                 questions_processed=0,
                 questions_failed=0
             )
+        finally:
+            # Clear the processor reference
+            self.current_excel_processor = None
     
     def _handle_question_result(self, result: ProcessingResult) -> None:
         """Handle question processing result on main thread."""
@@ -1063,14 +1072,55 @@ class UIManager:
         except Exception as e:
             logger.error(f"Error clearing reasoning display: {e}")
     
-    def _set_processing_state(self, processing: bool) -> None:
-        """Enable/disable UI elements during processing."""
+    def _set_processing_state(self, processing: bool, is_spreadsheet: bool = False) -> None:
+        """Enable/disable UI elements during processing.
+        
+        Args:
+            processing: Whether processing is active
+            is_spreadsheet: Whether this is spreadsheet processing (vs single question)
+        """
         self.processing_active = processing
         
-        # Update button states
-        state = tk.DISABLED if processing else tk.NORMAL
-        self.ask_button.config(state=state)
-        self.import_button.config(state=state)
+        if processing and is_spreadsheet:
+            # Spreadsheet mode: special UI state
+            # Clear and disable question entry
+            self.question_entry.delete("1.0", tk.END)
+            self.question_entry.config(state=tk.DISABLED, bg="#f0f0f0")
+            
+            # Disable character limit and max retries (keep values visible)
+            self.char_limit_entry.config(state=tk.DISABLED)
+            self.max_retries_entry.config(state=tk.DISABLED)
+            
+            # Hide Documentation tab
+            self._hide_documentation_tab()
+            
+            # Change Ask button to Stop button
+            self.ask_button.config(text="Stop", command=self._on_stop_clicked, state=tk.NORMAL)
+            
+            # Disable Import button
+            self.import_button.config(state=tk.DISABLED)
+        elif processing:
+            # Single question mode: disable all buttons
+            state = tk.DISABLED
+            self.ask_button.config(state=state)
+            self.import_button.config(state=state)
+        else:
+            # Not processing: restore normal state
+            # Re-enable question entry
+            self.question_entry.config(state=tk.NORMAL, bg="white")
+            
+            # Re-enable character limit and max retries
+            self.char_limit_entry.config(state=tk.NORMAL)
+            self.max_retries_entry.config(state=tk.NORMAL)
+            
+            # Show Documentation tab
+            self._show_documentation_tab()
+            
+            # Restore Ask button
+            self.ask_button.config(text="Ask!", command=self._on_ask_clicked, state=tk.NORMAL)
+            
+            # Re-enable Import button
+            self.import_button.config(state=tk.NORMAL)
         
         # Update status
         if processing:
@@ -1078,6 +1128,42 @@ class UIManager:
             self.status_manager.show_progress()
         else:
             self.status_manager.hide_progress()
+    
+    def _hide_documentation_tab(self) -> None:
+        """Hide the Documentation tab during spreadsheet processing."""
+        try:
+            # Find the Documentation tab index
+            for i in range(self.results_notebook.index("end")):
+                if self.results_notebook.tab(i, "text") == "Documentation":
+                    self.results_notebook.hide(i)
+                    break
+        except Exception as e:
+            logger.error(f"Error hiding Documentation tab: {e}")
+    
+    def _show_documentation_tab(self) -> None:
+        """Show the Documentation tab after spreadsheet processing."""
+        try:
+            # Find the Documentation tab index
+            for i in range(self.results_notebook.index("end")):
+                if self.results_notebook.tab(i, "text") == "Documentation":
+                    self.results_notebook.add(self.docs_frame, text="Documentation")
+                    break
+        except Exception as e:
+            logger.error(f"Error showing Documentation tab: {e}")
+    
+    def _on_stop_clicked(self) -> None:
+        """Handle Stop button click during spreadsheet processing."""
+        if not self.processing_active:
+            return
+        
+        # Cancel the current processing
+        if self.current_excel_processor:
+            logger.info("Stop button clicked - cancelling Excel processing")
+            self.update_reasoning("Stop requested - cancelling spreadsheet processing...")
+            self.current_excel_processor.cancel_processing()
+            
+            # UI will be restored when processing completes
+            self.status_manager.set_status("Cancelling processing...", "info")
     
     def _clear_results(self) -> None:
         """Clear all result displays."""
@@ -1244,7 +1330,7 @@ class UIManager:
             self._load_and_display_excel_sync(file_path)
             
             # Then start async processing in background
-            self._set_processing_state(True)
+            self._set_processing_state(True, is_spreadsheet=True)
             self._start_async_excel_processing(file_path)
             
         except Exception as e:
