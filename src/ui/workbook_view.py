@@ -16,7 +16,7 @@ class WorkbookView:
     """Multi-sheet workbook view with tab navigation and live updates."""
     
     POLL_INTERVAL_MS = 50  # Poll UI queue every 50ms
-    SPINNER_CHAR = "⟳"  # Unicode spinner character
+    SPINNER_CHAR = "◐"  # Spinner character - left half black circle
     MAX_TAB_NAME_LENGTH = 20  # Maximum characters for tab names
     
     def __init__(
@@ -37,25 +37,52 @@ class WorkbookView:
         self.ui_update_queue = ui_update_queue
         self.navigation_state = NavigationState()
         
-        self.notebook: Optional[ttk.Notebook] = None
         self.sheet_views: List[SpreadsheetView] = []
         self.sheet_frames: List[ttk.Frame] = []
         self.is_polling = False
         self.poll_after_id: Optional[str] = None
+        
+        # Custom left-aligned tab layout attributes
+        self._use_custom_layout = False
+        self._tab_buttons: List[ttk.Button] = []
+        self._selected_tab_index = 0
+        self._tab_container = None
+        self._content_container = None
+        
+        # Configure style for workbook with custom left-aligned tab layout
+        # Note: Style configuration persists globally after being set
+        style = ttk.Style()
+        
+        # We'll create a custom solution using a frame with left-aligned buttons
+        # that look like proper tabs and control a hidden notebook
+        self._use_custom_layout = True
+        self._tab_buttons = []
+        self._selected_tab_index = 0
     
-    def render(self) -> ttk.Notebook:
-        """Create notebook with all sheet tabs.
+    def render(self) -> ttk.Frame:
+        """Create workbook view with left-aligned tabs at bottom.
         
         Returns:
-            Configured Notebook widget ready for display
+            Container frame with custom tab layout
         """
-        # Create notebook widget
-        self.notebook = ttk.Notebook(self.parent)
+        # Create main container
+        main_container = ttk.Frame(self.parent)
         
-        # Create a frame and SpreadsheetView for each sheet
+        # Create content area (where spreadsheets will be shown)
+        self._content_container = ttk.Frame(main_container)
+        self._content_container.pack(fill=tk.BOTH, expand=True)
+        
+        # Create tab container at bottom, aligned to left
+        self._tab_container = ttk.Frame(main_container, relief='solid', borderwidth=1)
+        self._tab_container.pack(side=tk.BOTTOM, fill=tk.X, pady=(2, 0))
+        
+        # Create frames directly in content container (no notebook needed)
+        # We'll manage sheet switching manually
+        
+        # Create frames and views for each sheet
         for sheet_idx, sheet_data in enumerate(self.workbook_data.sheets):
-            # Create frame for this sheet
-            frame = ttk.Frame(self.notebook)
+            # Create frame directly in content container
+            frame = ttk.Frame(self._content_container)
             self.sheet_frames.append(frame)
             
             # Create SpreadsheetView for this sheet
@@ -63,18 +90,102 @@ class WorkbookView:
             treeview = spreadsheet_view.render()
             self.sheet_views.append(spreadsheet_view)
             
-            # Add tab with truncated name if necessary
-            tab_text = self._get_tab_text(sheet_data.sheet_name, is_processing=False)
-            self.notebook.add(frame, text=tab_text)
+            # Don't pack frame yet - we'll show only the selected one
             
-            logger.debug(f"Added tab for sheet '{sheet_data.sheet_name}' (index: {sheet_idx})")
+            # Create custom tab button
+            self._create_tab_button(sheet_idx, sheet_data.sheet_name)
+            
+            logger.debug(f"Added sheet '{sheet_data.sheet_name}' (index: {sheet_idx})")
         
-        # Bind tab change event to handle user navigation
-        self.notebook.bind('<<NotebookTabChanged>>', self._handle_user_tab_click)
+        # Select first tab and show its frame
+        if self._tab_buttons:
+            self._select_tab(0)
+            
+        # No notebook event binding needed since we removed the notebook
         
         logger.info(f"Rendered workbook view with {len(self.workbook_data.sheets)} sheets")
         
-        return self.notebook
+        return main_container
+    
+    def _create_tab_button(self, sheet_idx: int, sheet_name: str) -> None:
+        """Create a custom tab button with proper left alignment."""
+        # Get initial tab text
+        tab_text = self._get_tab_text(sheet_name, is_processing=False)
+        
+        # Create button styled to look like a tab
+        tab_button = ttk.Button(
+            self._tab_container,
+            text=tab_text,
+            command=lambda idx=sheet_idx: self._on_tab_click(idx)
+        )
+        
+        # Configure the button style to look like a proper tab
+        style = ttk.Style()
+        
+        # Create unique style for each button state
+        selected_style = f'SelectedTab{sheet_idx}.TButton'
+        normal_style = f'NormalTab{sheet_idx}.TButton'
+        
+        # Selected tab style (active/current sheet)
+        style.configure(selected_style,
+                       padding=[12, 6, 12, 6],
+                       font=('Segoe UI', 9, 'bold'),
+                       relief='solid',
+                       borderwidth=2,
+                       background='#ffffff',
+                       foreground='#000000')
+        
+        # Normal tab style (inactive sheets)
+        style.configure(normal_style,
+                       padding=[12, 6, 12, 6],
+                       font=('Segoe UI', 9),
+                       relief='raised',
+                       borderwidth=1,
+                       background='#f0f0f0',
+                       foreground='#666666')
+        
+        # Hover effects
+        style.map(normal_style,
+                 background=[('active', '#e1f5fe')],
+                 foreground=[('active', '#000000')])
+        
+        # Pack button to the left side with small spacing
+        tab_button.pack(side=tk.LEFT, padx=(0, 1))
+        
+        # Store button and apply initial style
+        self._tab_buttons.append(tab_button)
+        tab_button.configure(style=normal_style)
+    
+    def _on_tab_click(self, sheet_idx: int) -> None:
+        """Handle tab button click."""
+        self._select_tab(sheet_idx)
+        # Handle navigation state
+        self.navigation_state.lock_to_sheet(sheet_idx)
+        logger.info(f"User selected tab {sheet_idx}, auto-navigation disabled")
+    
+    def _select_tab(self, sheet_idx: int) -> None:
+        """Visually select a tab and show corresponding frame."""
+        if not self._tab_buttons or sheet_idx >= len(self._tab_buttons):
+            return
+        
+        # Hide all frames first
+        for frame in self.sheet_frames:
+            frame.pack_forget()
+        
+        # Show the selected frame
+        if sheet_idx < len(self.sheet_frames):
+            self.sheet_frames[sheet_idx].pack(fill=tk.BOTH, expand=True)
+        
+        # Update all button styles
+        for i, button in enumerate(self._tab_buttons):
+            if i == sheet_idx:
+                # Selected tab style
+                button.configure(style=f'SelectedTab{i}.TButton')
+            else:
+                # Normal tab style
+                button.configure(style=f'NormalTab{i}.TButton')
+        
+        self._selected_tab_index = sheet_idx
     
     def _get_tab_text(self, sheet_name: str, is_processing: bool) -> str:
         """Get display text for a tab, handling truncation and spinner.
@@ -108,13 +219,11 @@ class WorkbookView:
             logger.debug(f"Auto-navigation disabled, not switching to sheet {sheet_index}")
             return
         
-        if not self.notebook:
-            logger.error("Cannot navigate: notebook not initialized")
-            return
-        
         if 0 <= sheet_index < len(self.sheet_views):
             try:
-                self.notebook.select(sheet_index)
+                # Select the tab which will show the frame
+                if self._use_custom_layout:
+                    self._select_tab(sheet_index)
                 logger.info(f"Auto-navigated to sheet {sheet_index}")
             except Exception as e:
                 logger.error(f"Failed to navigate to sheet {sheet_index}: {e}")
@@ -126,16 +235,15 @@ class WorkbookView:
             sheet_index: Zero-based sheet index
             is_processing: True to show spinner, False to hide
         """
-        if not self.notebook:
-            logger.error("Cannot update tab: notebook not initialized")
-            return
-        
         if 0 <= sheet_index < len(self.workbook_data.sheets):
             sheet_name = self.workbook_data.sheets[sheet_index].sheet_name
             tab_text = self._get_tab_text(sheet_name, is_processing)
             
             try:
-                self.notebook.tab(sheet_index, text=tab_text)
+                # Update the custom tab button text
+                if self._use_custom_layout and sheet_index < len(self._tab_buttons):
+                    self._tab_buttons[sheet_index].configure(text=tab_text)
+                
                 logger.debug(f"Updated tab {sheet_index} indicator: processing={is_processing}")
             except Exception as e:
                 logger.error(f"Failed to update tab {sheet_index}: {e}")
@@ -146,11 +254,9 @@ class WorkbookView:
         Args:
             event: Notebook tab change event
         """
-        if not self.notebook:
-            return
-        
         try:
-            selected_index = self.notebook.index(self.notebook.select())
+            # Get currently selected tab index from our custom tracking
+            selected_index = self._selected_tab_index
             self.navigation_state.lock_to_sheet(selected_index)
             logger.info(f"User selected sheet {selected_index}, auto-navigation disabled")
         except Exception as e:
@@ -310,11 +416,9 @@ class WorkbookView:
         Returns:
             Zero-based index of current sheet, or 0 if none selected
         """
-        if not self.notebook:
-            return 0
-        
         try:
-            return self.notebook.index(self.notebook.select())
+            # Return our tracked selected index
+            return self._selected_tab_index if hasattr(self, '_selected_tab_index') else 0
         except Exception:
             return 0
     
@@ -365,9 +469,18 @@ class WorkbookView:
             frame.destroy()
         self.sheet_frames.clear()
         
-        # Destroy notebook
-        if self.notebook:
-            self.notebook.destroy()
-            self.notebook = None
+        # Destroy custom tab buttons
+        for button in self._tab_buttons:
+            button.destroy()
+        self._tab_buttons.clear()
+        
+        # Destroy containers
+        if self._tab_container:
+            self._tab_container.destroy()
+            self._tab_container = None
+        
+        if self._content_container:
+            self._content_container.destroy()
+            self._content_container = None
         
         logger.info("Destroyed workbook view")

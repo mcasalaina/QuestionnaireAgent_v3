@@ -32,13 +32,13 @@ class AzureAuthenticator:
         self._endpoint_validated = False
     
     async def get_credential(self) -> ChainedTokenCredential:
-        """Get authenticated Azure credential with interactive browser as primary method.
+        """Get authenticated Azure credential with Azure CLI as primary method.
         
         Credential chain priority:
-        1. InteractiveBrowserCredential - Opens browser for interactive login (PRIMARY)
-        2. AzureCliCredential - Uses existing 'az login' session if available
-        3. EnvironmentCredential - Uses service principal env vars if configured
-        4. ManagedIdentityCredential - For Azure-hosted apps with managed identity
+        1. AzureCliCredential - Uses existing 'az login' or 'azd login' session (PRIMARY)
+        2. EnvironmentCredential - Uses service principal env vars if configured
+        3. ManagedIdentityCredential - For Azure-hosted apps with managed identity
+        4. InteractiveBrowserCredential - Opens browser for interactive login (FALLBACK)
         
         Returns:
             Authenticated Azure credential instance.
@@ -49,22 +49,22 @@ class AzureAuthenticator:
         if self._credential is not None:
             return self._credential
         
-        # Create credential chain with interactive browser as PRIMARY method
-        # This ensures browser login happens first if no existing auth is found
+        # Create credential chain checking for existing Azure CLI login first
+        # This avoids opening the browser if user has already run 'az login' or 'azd login'
         try:
             credential = ChainedTokenCredential(
-                InteractiveBrowserCredential(),  # PRIMARY: Opens browser automatically
-                AzureCliCredential(),             # FALLBACK: If 'az login' already done
+                AzureCliCredential(),             # PRIMARY: Check for 'az login' or 'azd login' first
                 EnvironmentCredential(),          # FALLBACK: If service principal configured
-                ManagedIdentityCredential()       # FALLBACK: If running in Azure with managed identity
+                ManagedIdentityCredential(),      # FALLBACK: If running in Azure with managed identity
+                InteractiveBrowserCredential()    # FALLBACK: Opens browser only if no other auth available
             )
             self._credential = credential
-            logger.info("Credential chain created with interactive browser as primary authentication method")
+            logger.info("Credential chain created prioritizing existing Azure CLI login")
             return credential
         except Exception as e:
             logger.error(f"Failed to create credential chain: {e}")
             raise AuthenticationError(
-                "Failed to create Azure credentials. Interactive browser login will be attempted."
+                "Failed to create Azure credentials. Please run 'az login' or 'azd login' to authenticate."
             ) from e
     
     async def _validate_azure_endpoint(self) -> None:
@@ -266,11 +266,11 @@ async def test_authentication() -> bool:
         raise AuthenticationError(
             f"Azure authentication failed: {e}\n\n"
             "The application attempted to authenticate using:\n"
-            "1. Interactive browser login (opens automatically)\n"
-            "2. Existing Azure CLI login (if 'az login' was run previously)\n"
-            "3. Service principal environment variables (if configured)\n"
-            "4. Managed identity (if running in Azure)\n\n"
-            "If the browser window did not open, you may need to run 'az login' manually."
+            "1. Existing Azure CLI login (from 'az login' or 'azd login')\n"
+            "2. Service principal environment variables (if configured)\n"
+            "3. Managed identity (if running in Azure)\n"
+            "4. Interactive browser login (opens automatically as last resort)\n\n"
+            "To avoid browser prompts, run 'az login' or 'azd login' before starting the application."
         ) from e
 
 

@@ -41,7 +41,8 @@ async def initialize_and_run():
         
         # Step 2: Test Azure authentication immediately
         print("\nTesting Azure authentication...")
-        print("(This may open a browser window for interactive login)")
+        print("(Checking for existing 'az login' or 'azd login' session)")
+        print("(Browser login will only be used if no existing session is found)")
         
         try:
             await test_authentication()
