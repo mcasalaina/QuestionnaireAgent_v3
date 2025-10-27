@@ -36,6 +36,7 @@ class LinkCheckerExecutor(Executor):
         if self.agent is None:
             self.agent = ChatAgent(
                 chat_client=self.azure_client,
+                name="Link Checker",
                 instructions="""You are an expert Link Checker specializing in validating documentation URLs for Microsoft Azure AI services.
 
 Your role is to analyze URL validation results and determine if the provided links are relevant and accessible for the given answer content.
