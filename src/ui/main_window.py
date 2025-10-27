@@ -7,7 +7,7 @@ import asyncio
 import queue
 import os
 import concurrent.futures
-from typing import Optional, Callable, Any
+from typing import Optional, Callable, Any, List
 import logging
 from utils.data_types import Question, ProcessingResult, ExcelProcessingResult, WorkbookData, AgentInitState
 from utils.exceptions import (
@@ -54,6 +54,9 @@ class UIManager:
             auto_spreadsheet: Spreadsheet path to process automatically after initialization (optional).
         """
         self.agent_coordinator = agent_coordinator
+        
+        # For parallel spreadsheet processing, store 3 coordinators
+        self.spreadsheet_agent_coordinators: Optional[List] = None
         
         # Store auto-start settings
         self.auto_question = auto_question
@@ -522,25 +525,26 @@ class UIManager:
             # Get the workbook data that was loaded synchronously
             workbook_data = self._temp_workbook_data
             
-            self.update_reasoning("Starting agent initialization and question processing...")
+            self.update_reasoning("Starting agent initialization for spreadsheet processing...")
             
-            # Ensure agent coordinator is available (wait if initializing)
-            try:
-                await self._ensure_agents_ready()
-            except Exception as e:
-                logger.error(f"Failed to ensure agents ready: {e}")
-                return ExcelProcessingResult(
-                    success=False,
-                    error_message=f"Agent initialization failed: {str(e)}",
-                    questions_processed=0,
-                    questions_failed=0
-                )
+            # For spreadsheet mode, create 3 agent coordinators for parallel processing
+            if not self.spreadsheet_agent_coordinators:
+                try:
+                    self.spreadsheet_agent_coordinators = await self._create_spreadsheet_agent_coordinators()
+                except Exception as e:
+                    logger.error(f"Failed to create spreadsheet agent coordinators: {e}")
+                    return ExcelProcessingResult(
+                        success=False,
+                        error_message=f"Agent initialization failed: {str(e)}",
+                        questions_processed=0,
+                        questions_failed=0
+                    )
             
-            # Process workbook (import ExcelProcessor lazily)
-            self.update_reasoning("Starting question processing...")
-            from excel.processor import ExcelProcessor
-            processor = ExcelProcessor(
-                self.agent_coordinator, 
+            # Process workbook with parallel processor
+            self.update_reasoning("Starting parallel question processing with 3 agent sets...")
+            from excel.processor import ParallelExcelProcessor
+            processor = ParallelExcelProcessor(
+                self.spreadsheet_agent_coordinators, 
                 self.ui_update_queue, 
                 self.update_reasoning,
                 self._display_agent_conversation
@@ -1098,12 +1102,12 @@ class UIManager:
     
     def _cleanup(self) -> None:
         """Clean up resources before closing."""
+        cleanup_futures = []
+        
+        # Cleanup single-question agent coordinator
         if self.agent_coordinator:
             try:
-                # Run cleanup synchronously to ensure it completes before window closes
                 logger.info("Starting agent cleanup...")
-                
-                # Create a future to track completion
                 cleanup_future = concurrent.futures.Future()
                 
                 def cleanup_complete(result):
@@ -1119,17 +1123,47 @@ class UIManager:
                     callback=cleanup_complete,
                     error_callback=cleanup_error
                 )
-                
-                # Wait for cleanup to complete (with timeout)
-                try:
-                    cleanup_future.result(timeout=5.0)
-                except concurrent.futures.TimeoutError:
-                    logger.warning("Agent cleanup timed out after 5 seconds")
-                except Exception as e:
-                    logger.warning(f"Agent cleanup failed: {e}")
-                    
+                cleanup_futures.append(cleanup_future)
             except Exception as e:
                 logger.warning(f"Error during cleanup: {e}")
+        
+        # Cleanup spreadsheet agent coordinators
+        if self.spreadsheet_agent_coordinators:
+            try:
+                logger.info("Starting spreadsheet agent coordinators cleanup...")
+                for i, coordinator in enumerate(self.spreadsheet_agent_coordinators):
+                    cleanup_future = concurrent.futures.Future()
+                    
+                    def make_callbacks(idx):
+                        def cleanup_complete(result):
+                            logger.info(f"Spreadsheet agent set {idx + 1} cleanup completed")
+                            cleanup_future.set_result(True)
+                        
+                        def cleanup_error(e):
+                            logger.warning(f"Error cleaning up agent set {idx + 1}: {e}")
+                            cleanup_future.set_exception(e)
+                        
+                        return cleanup_complete, cleanup_error
+                    
+                    complete_cb, error_cb = make_callbacks(i)
+                    
+                    self.asyncio_runner.run_coroutine(
+                        coordinator.cleanup_agents(),
+                        callback=complete_cb,
+                        error_callback=error_cb
+                    )
+                    cleanup_futures.append(cleanup_future)
+            except Exception as e:
+                logger.warning(f"Error during spreadsheet coordinators cleanup: {e}")
+        
+        # Wait for all cleanups to complete (with timeout)
+        for i, future in enumerate(cleanup_futures):
+            try:
+                future.result(timeout=5.0)
+            except concurrent.futures.TimeoutError:
+                logger.warning(f"Cleanup {i + 1} timed out after 5 seconds")
+            except Exception as e:
+                logger.warning(f"Cleanup {i + 1} failed: {e}")
         
         # Shutdown the asyncio runner
         try:
@@ -1184,6 +1218,29 @@ class UIManager:
         
         self.update_reasoning("Azure AI agents initialized successfully")
         return coordinator
+    
+    async def _create_spreadsheet_agent_coordinators(self):
+        """Create 3 agent coordinators for parallel spreadsheet processing."""
+        self.update_reasoning("Initializing 3 agent sets for parallel spreadsheet processing... (this may take 60-90 seconds)")
+        
+        # Lazy import to avoid slow startup
+        from utils.azure_auth import get_azure_client
+        
+        azure_client = await get_azure_client()
+        bing_connection_id = config_manager.get_bing_connection_id()
+        browser_automation_connection_id = config_manager.get_browser_automation_connection_id()
+        
+        from agents.workflow_manager import create_agent_coordinator
+        
+        # Create 3 coordinators in parallel
+        coordinators = await asyncio.gather(
+            create_agent_coordinator(azure_client, bing_connection_id, browser_automation_connection_id),
+            create_agent_coordinator(azure_client, bing_connection_id, browser_automation_connection_id),
+            create_agent_coordinator(azure_client, bing_connection_id, browser_automation_connection_id)
+        )
+        
+        self.update_reasoning(f"✅ All 3 agent sets initialized successfully")
+        return list(coordinators)
     
     def _handle_agent_init_success(self, coordinator) -> None:
         """Handle successful agent initialization on main thread."""
