@@ -8,7 +8,7 @@ from agent_framework import WorkflowBuilder, Workflow
 from agent_framework_azure_ai import AzureAIAgentClient
 from utils.data_types import (
     Question, Answer, ProcessingResult, AgentStep, 
-    ValidationStatus, HealthStatus
+    ValidationStatus, HealthStatus, DocumentationLink
 )
 from utils.logger import log_workflow_progress, create_span
 from utils.exceptions import (
@@ -96,7 +96,7 @@ class AgentCoordinator:
         question: Question,
         progress_callback: Callable[[str, str, float], None],
         reasoning_callback: Optional[Callable[[str], None]] = None,
-        agent_conversation_callback: Optional[Callable[[List[AgentStep], Optional[List]], None]] = None
+        agent_conversation_callback: Optional[Callable[[List[AgentStep], Optional[List[DocumentationLink]]], None]] = None
     ) -> ProcessingResult:
         """Execute multi-agent workflow for single question.
         
@@ -261,7 +261,7 @@ class AgentCoordinator:
         questions: List[Question],
         progress_callback: Callable[[str, str, float], None],
         reasoning_callback: Optional[Callable[[str], None]] = None,
-        agent_conversation_callback: Optional[Callable[[List[AgentStep], Optional[List]], None]] = None
+        agent_conversation_callback: Optional[Callable[[List[AgentStep], Optional[List[DocumentationLink]]], None]] = None
     ) -> List[ProcessingResult]:
         """Execute multi-agent workflow for multiple questions.
         
