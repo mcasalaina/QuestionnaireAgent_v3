@@ -1148,9 +1148,11 @@ class UIManager:
         
         azure_client = await get_azure_client()
         bing_connection_id = config_manager.get_bing_connection_id()
+        browser_automation_connection_id = config_manager.get_browser_automation_connection_id()
         
         from agents.workflow_manager import create_agent_coordinator
-        coordinator = await create_agent_coordinator(azure_client, bing_connection_id)
+        coordinator = await create_agent_coordinator(azure_client, bing_connection_id, 
+                                                     browser_automation_connection_id)
         
         self.update_reasoning("Azure AI agents initialized successfully")
         return coordinator

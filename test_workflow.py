@@ -35,13 +35,16 @@ async def test_agent_workflow():
         logger.info("✓ Azure client obtained")
         
         # Test 3: Get configuration
-        logger.info("Test 3: Getting Bing connection ID...")
+        logger.info("Test 3: Getting connection IDs...")
         bing_connection_id = config_manager.get_bing_connection_id()
+        browser_automation_connection_id = config_manager.get_browser_automation_connection_id()
         logger.info(f"✓ Bing connection ID: {bing_connection_id}")
+        logger.info(f"✓ Browser automation connection ID: {browser_automation_connection_id}")
         
         # Test 4: Create agent coordinator
         logger.info("Test 4: Creating agent coordinator...")
-        coordinator = await create_agent_coordinator(azure_client, bing_connection_id)
+        coordinator = await create_agent_coordinator(azure_client, bing_connection_id, 
+                                                     browser_automation_connection_id)
         logger.info("✓ Agent coordinator created")
         
         # Test 5: Create test question

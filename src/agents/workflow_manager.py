@@ -18,8 +18,7 @@ from utils.exceptions import (
 from utils.azure_auth import foundry_agent_session
 from agents.question_answerer import QuestionAnswererExecutor
 from agents.answer_checker import AnswerCheckerExecutor
-# Temporarily commented out to avoid Playwright dependency issues
-# from agents.link_checker import LinkCheckerExecutor
+from agents.link_checker import LinkCheckerExecutor
 
 
 logger = logging.getLogger(__name__)
@@ -28,23 +27,25 @@ logger = logging.getLogger(__name__)
 class AgentCoordinator:
     """Orchestrates multi-agent workflow using Microsoft Agent Framework."""
     
-    def __init__(self, azure_client: AzureAIAgentClient, bing_connection_id: str):
+    def __init__(self, azure_client: AzureAIAgentClient, bing_connection_id: str, 
+                 browser_automation_connection_id: str):
         """Initialize the agent coordinator.
         
         Args:
             azure_client: Azure AI Agent client for creating agents.
             bing_connection_id: Bing search connection ID for web grounding.
+            browser_automation_connection_id: Browser automation connection ID for link checking.
         """
         self.azure_client = azure_client
         self.bing_connection_id = bing_connection_id
+        self.browser_automation_connection_id = browser_automation_connection_id
         self.workflow: Optional[Workflow] = None
         self.executors_created = False
         
         # Agent executors
         self.question_answerer: Optional[QuestionAnswererExecutor] = None
         self.answer_checker: Optional[AnswerCheckerExecutor] = None
-        # Temporarily commented out to avoid Playwright dependency issues
-        # self.link_checker: Optional[LinkCheckerExecutor] = None
+        self.link_checker: Optional[LinkCheckerExecutor] = None
     
     async def create_agents(self) -> None:
         """Initialize the three specialized agents with Azure AI Foundry.
@@ -68,17 +69,18 @@ class AgentCoordinator:
                 azure_client=self.azure_client
             )
             
-            # Temporarily commented out to avoid Playwright dependency issues
-            # self.link_checker = LinkCheckerExecutor(
-            #     azure_client=self.azure_client
-            # )
+            logger.info("Creating link checker executor...")
+            self.link_checker = LinkCheckerExecutor(
+                azure_client=self.azure_client,
+                browser_automation_connection_id=self.browser_automation_connection_id
+            )
             
             logger.info("Building workflow...")
-            # Build the sequential workflow (without link checker for now)
+            # Build the sequential workflow
             self.workflow = (
                 WorkflowBuilder()
                 .add_edge(self.question_answerer, self.answer_checker)
-                # .add_edge(self.answer_checker, self.link_checker)
+                .add_edge(self.answer_checker, self.link_checker)
                 .set_start_executor(self.question_answerer)
                 .build()
             )
@@ -376,18 +378,20 @@ class AgentCoordinator:
             logger.warning(f"Error during agent cleanup: {e}")
 
 
-async def create_agent_coordinator(azure_client: AzureAIAgentClient, bing_connection_id: str) -> AgentCoordinator:
+async def create_agent_coordinator(azure_client: AzureAIAgentClient, bing_connection_id: str, 
+                                  browser_automation_connection_id: str) -> AgentCoordinator:
     """Create and initialize an agent coordinator.
     
     Args:
         azure_client: Azure AI Agent client.
         bing_connection_id: Bing search connection ID.
+        browser_automation_connection_id: Browser automation connection ID for link checking.
         
     Returns:
         Initialized AgentCoordinator instance.
     """
     logger.info("Creating agent coordinator...")
-    coordinator = AgentCoordinator(azure_client, bing_connection_id)
+    coordinator = AgentCoordinator(azure_client, bing_connection_id, browser_automation_connection_id)
     
     logger.info("Creating agents with 60 second timeout...")
     try:

@@ -43,6 +43,7 @@ async def run_diagnostics():
             print(f"   - Endpoint: {config_manager.get_azure_endpoint()}")
             print(f"   - Model deployment: {config_manager.get_model_deployment()}")
             print(f"   - Bing connection: {config_manager.get_bing_connection_id()}")
+            print(f"   - Browser automation connection: {config_manager.get_browser_automation_connection_id()}")
         else:
             print("   ✗ Configuration validation failed:")
             for error in validation_result.error_details:
