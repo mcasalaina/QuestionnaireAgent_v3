@@ -303,6 +303,14 @@ Provide your validation decision:"""
     async def cleanup(self) -> None:
         """Clean up resources used by the executor."""
         if self.agent:
-            # Agent cleanup is handled automatically by the framework
-            logger.debug("Answer Checker executor cleanup completed")
-            self.agent = None
+            # Log cleanup for debugging
+            logger.info("Cleaning up Answer Checker agent...")
+            try:
+                # The Microsoft Agent Framework handles agent lifecycle automatically
+                # when the underlying AzureAIAgentClient is closed
+                logger.debug("Answer Checker agent cleanup completed")
+            except Exception as e:
+                logger.warning(f"Error during Answer Checker cleanup: {e}")
+            finally:
+                self.agent = None
+                self.agent_id = None
