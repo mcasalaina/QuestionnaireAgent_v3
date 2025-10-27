@@ -157,6 +157,49 @@ IMPORTANT:
         
         with create_span("link_checker_execution", question_text=question.text):
             try:
+                # Check if there are any links to validate
+                if not answer_sources or len(answer_sources) == 0:
+                    # No links provided - this is a rejection
+                    execution_time = time.time() - start_time
+                    
+                    log_agent_step(
+                        "link_checker",
+                        "No documentation links found in answer - REJECTING",
+                        "completed",
+                        execution_time
+                    )
+                    
+                    link_feedback = "Answer must include authoritative documentation links from official Microsoft sources."
+                    
+                    # Add agent step to history
+                    agent_steps = data.get("agent_steps", [])
+                    agent_steps.append(
+                        AgentStep(
+                            agent_name=AgentType.LINK_CHECKER,
+                            input_data="Links to check: []",
+                            output_data="LINKS_INVALID: No documentation links provided in the answer.",
+                            execution_time=execution_time,
+                            status=StepStatus.SUCCESS
+                        )
+                    )
+                    
+                    # Prepare rejection result
+                    rejection_result = {
+                        "question": question,
+                        "raw_answer": raw_answer,
+                        "validation_status": ValidationStatus.REJECTED_LINKS,
+                        "validation_feedback": data.get("validation_feedback", ""),
+                        "link_feedback": link_feedback,
+                        "documentation_links": [],
+                        "agent_steps": agent_steps,
+                        "processing_complete": True
+                    }
+                    
+                    await ctx.yield_output(rejection_result)
+                    
+                    logger.info(f"Link Checker completed: REJECTED (no links) in {execution_time:.2f}s")
+                    return
+                
                 log_agent_step(
                     "link_checker",
                     f"Checking {len(answer_sources)} links for accessibility and relevance using Browser Automation",
