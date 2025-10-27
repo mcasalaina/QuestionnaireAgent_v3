@@ -543,7 +543,8 @@ class UIManager:
                 self.agent_coordinator, 
                 self.ui_update_queue, 
                 self.update_reasoning,
-                self._display_agent_conversation
+                self._display_agent_conversation,
+                self.update_progress
             )
             result = await processor.process_workbook(
                 workbook_data,

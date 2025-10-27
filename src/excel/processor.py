@@ -21,7 +21,8 @@ class ExcelProcessor:
         agent_coordinator: AgentCoordinator,
         ui_update_queue: UIUpdateQueue,
         reasoning_callback = None,
-        agent_conversation_callback = None
+        agent_conversation_callback = None,
+        progress_callback = None
     ):
         """Initialize processor.
         
@@ -30,11 +31,13 @@ class ExcelProcessor:
             ui_update_queue: Thread-safe queue for UI updates
             reasoning_callback: Optional callback for agent reasoning updates
             agent_conversation_callback: Optional callback for displaying formatted agent conversation
+            progress_callback: Optional callback for progress updates (agent, message, progress)
         """
         self.agent_coordinator = agent_coordinator
         self.ui_queue = ui_update_queue
         self.reasoning_callback = reasoning_callback
         self.agent_conversation_callback = agent_conversation_callback
+        self.progress_callback = progress_callback
         self.cancelled = False
     
     async def process_workbook(
@@ -102,10 +105,13 @@ class ExcelProcessor:
                         logger.info(f"📏 Character limit: {char_limit}")
                         logger.info(f"🔄 Max retries: {max_retries}")
                         
-                        # Create progress callback that logs and optionally updates UI
-                        def progress_callback(agent, msg, progress):
+                        # Create progress callback that logs and updates UI
+                        def local_progress_callback(agent, msg, progress):
                             progress_msg = f"Agent progress - {agent}: {msg} ({progress:.1%})"
                             logger.info(f"📊 {progress_msg}")
+                            # Update UI progress bar if callback provided
+                            if self.progress_callback:
+                                self.progress_callback(agent, msg, progress)
                         
                         # Create reasoning callback that logs and updates UI
                         def reasoning_callback(msg):
@@ -117,7 +123,7 @@ class ExcelProcessor:
                         logger.info(f"🚀 Starting agent processing for question {row_idx + 1}...")
                         result = await self.agent_coordinator.process_question(
                             question,
-                            progress_callback,
+                            local_progress_callback,
                             reasoning_callback,
                             self.agent_conversation_callback
                         )
