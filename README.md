@@ -31,7 +31,7 @@ If either checker rejects the answer, the Question Answerer reformulates and the
 - Azure subscription with AI Foundry project
 - Bing Search resource connected to your AI Foundry project
 
-**Authentication:** The application will test your Azure authentication immediately on startup. If you're not already logged in, it will automatically open a browser window for interactive login. 
+**Authentication:** The application will test your Azure authentication immediately on startup. If you have already run `az login` or `azd login`, the application will use that existing session. Otherwise, it will automatically open a browser window for interactive login. 
 
 If you prefer to authenticate before starting the app, you can:
 - Run `az login` in your terminal

@@ -87,22 +87,22 @@ class TestAuthenticationFlow:
             mock_cred_class.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_authenticator_uses_interactive_browser_first(self):
-        """Test that authenticator creates credential chain with interactive browser first."""
+    async def test_authenticator_uses_azure_cli_first(self):
+        """Test that authenticator creates credential chain with Azure CLI first."""
         authenticator = AzureAuthenticator()
         
         with patch('utils.azure_auth.ChainedTokenCredential') as mock_chain:
-            with patch('utils.azure_auth.InteractiveBrowserCredential') as mock_browser:
-                with patch('utils.azure_auth.AzureCliCredential'):
-                    with patch('utils.azure_auth.EnvironmentCredential'):
-                        with patch('utils.azure_auth.ManagedIdentityCredential'):
+            with patch('utils.azure_auth.AzureCliCredential') as mock_cli:
+                with patch('utils.azure_auth.EnvironmentCredential'):
+                    with patch('utils.azure_auth.ManagedIdentityCredential'):
+                        with patch('utils.azure_auth.InteractiveBrowserCredential'):
                             await authenticator.get_credential()
                             
                             # Verify ChainedTokenCredential was called
                             mock_chain.assert_called_once()
                             
-                            # Verify InteractiveBrowserCredential is created (first in chain)
-                            mock_browser.assert_called_once()
+                            # Verify AzureCliCredential is created (first in chain)
+                            mock_cli.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_reset_authentication_clears_cache(self):
@@ -126,6 +126,43 @@ class TestAuthenticationFlow:
             assert mock_cred_class.call_count == 2
 
 
+class TestCredentialChainOrder:
+    """Test that credential chain tries authentication methods in correct order."""
+    
+    @pytest.mark.asyncio
+    async def test_credential_chain_order_in_chained_credential(self):
+        """Test that ChainedTokenCredential receives credentials in correct order."""
+        authenticator = AzureAuthenticator()
+        
+        with patch('utils.azure_auth.ChainedTokenCredential') as mock_chain:
+            with patch('utils.azure_auth.AzureCliCredential') as mock_cli:
+                with patch('utils.azure_auth.EnvironmentCredential') as mock_env:
+                    with patch('utils.azure_auth.ManagedIdentityCredential') as mock_managed:
+                        with patch('utils.azure_auth.InteractiveBrowserCredential') as mock_browser:
+                            mock_cli_instance = Mock()
+                            mock_env_instance = Mock()
+                            mock_managed_instance = Mock()
+                            mock_browser_instance = Mock()
+                            
+                            mock_cli.return_value = mock_cli_instance
+                            mock_env.return_value = mock_env_instance
+                            mock_managed.return_value = mock_managed_instance
+                            mock_browser.return_value = mock_browser_instance
+                            
+                            await authenticator.get_credential()
+                            
+                            # Verify ChainedTokenCredential was called with credentials in correct order
+                            mock_chain.assert_called_once()
+                            call_args = mock_chain.call_args[0]
+                            
+                            # Check that the order is: CLI, Environment, Managed Identity, Browser
+                            assert len(call_args) == 4
+                            assert call_args[0] is mock_cli_instance
+                            assert call_args[1] is mock_env_instance
+                            assert call_args[2] is mock_managed_instance
+                            assert call_args[3] is mock_browser_instance
+
+
 class TestAuthenticationErrorMessages:
     """Test that authentication errors provide helpful guidance."""
     
@@ -143,8 +180,8 @@ class TestAuthenticationErrorMessages:
             error_message = str(exc_info.value)
             
             # Check for helpful guidance in error message
-            assert "Interactive browser login" in error_message or "browser" in error_message
-            assert "az login" in error_message
+            assert "Azure CLI" in error_message or "az login" in error_message or "azd login" in error_message
+            assert "browser" in error_message.lower()
     
     @pytest.mark.asyncio
     async def test_authentication_error_contains_original_error(self):
