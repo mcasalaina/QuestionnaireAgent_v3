@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 from agent_framework import Executor, handler, WorkflowContext, ChatAgent, ChatMessage, Role
 from agent_framework_azure_ai import AzureAIAgentClient
 from azure.ai.agents.models import BrowserAutomationTool
+from azure.ai.projects import AIProjectClient
 from utils.data_types import (
     Question, AgentStep, AgentType, StepStatus, ValidationStatus, 
     DocumentationLink
@@ -27,24 +28,66 @@ class LinkCheckerExecutor(Executor):
         
         Args:
             azure_client: Azure AI Agent client instance.
-            browser_automation_connection_id: Browser automation connection for web verification.
+            browser_automation_connection_id: Browser automation connection name for web verification.
         """
         super().__init__(id="link_checker")
         self.azure_client = azure_client
-        self.browser_automation_connection_id = browser_automation_connection_id
+        self.browser_automation_connection_name = browser_automation_connection_id
+        self.browser_automation_connection_id: Optional[str] = None
         self.agent: Optional[ChatAgent] = None
+    
+    async def _resolve_connection_id(self) -> str:
+        """Resolve the full connection ID from the connection name.
+        
+        Uses AIProjectClient.connections.get() to retrieve the full resource ID
+        in the format: /subscriptions/.../connections/<connection_name>
+        
+        Returns:
+            The full connection ID.
+            
+        Raises:
+            AgentExecutionError: If connection cannot be resolved.
+        """
+        if self.browser_automation_connection_id:
+            return self.browser_automation_connection_id
+        
+        try:
+            logger.debug(f"Resolving connection ID for: {self.browser_automation_connection_name}")
+            
+            # Get the AIProjectClient from the azure_client
+            # The azure_client is an AzureAIAgentClient which contains project_client
+            if hasattr(self.azure_client, 'project_client'):
+                project_client = self.azure_client.project_client
+            else:
+                raise AgentExecutionError("Cannot access project_client from azure_client")
+            
+            # Get the connection by name to retrieve its full ID
+            # Note: connections.get() is async and must be awaited
+            connection = await project_client.connections.get(self.browser_automation_connection_name)
+            self.browser_automation_connection_id = connection.id
+            
+            logger.debug(f"Resolved connection ID: {self.browser_automation_connection_id}")
+            return self.browser_automation_connection_id
+            
+        except Exception as e:
+            error_msg = f"Failed to resolve Browser Automation connection '{self.browser_automation_connection_name}': {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise AgentExecutionError(error_msg) from e
     
     async def _get_agent(self) -> ChatAgent:
         """Get or create the link checker agent with Browser Automation tool."""
         if self.agent is None:
+            # Resolve the full connection ID from the connection name
+            connection_id = await self._resolve_connection_id()
+            
             # Create browser automation tool for link verification
             browser_tool = BrowserAutomationTool(
-                connection_id=self.browser_automation_connection_id
+                connection_id=connection_id
             )
             
             self.agent = ChatAgent(
                 chat_client=self.azure_client,
-                tools=[browser_tool],
+                tools=browser_tool.definitions,  # Use .definitions property for ChatAgent
                 name="Link Checker",
                 instructions="""You are an expert Link Checker specializing in validating documentation URLs for Microsoft Azure AI services.
 
