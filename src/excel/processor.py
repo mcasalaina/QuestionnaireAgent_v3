@@ -20,7 +20,8 @@ class ExcelProcessor:
         self,
         agent_coordinator: AgentCoordinator,
         ui_update_queue: UIUpdateQueue,
-        reasoning_callback = None
+        reasoning_callback = None,
+        agent_conversation_callback = None
     ):
         """Initialize processor.
         
@@ -28,10 +29,12 @@ class ExcelProcessor:
             agent_coordinator: Initialized AgentCoordinator instance
             ui_update_queue: Thread-safe queue for UI updates
             reasoning_callback: Optional callback for agent reasoning updates
+            agent_conversation_callback: Optional callback for displaying formatted agent conversation
         """
         self.agent_coordinator = agent_coordinator
         self.ui_queue = ui_update_queue
         self.reasoning_callback = reasoning_callback
+        self.agent_conversation_callback = agent_conversation_callback
         self.cancelled = False
     
     async def process_workbook(
@@ -125,6 +128,13 @@ class ExcelProcessor:
                             
                             logger.info(f"✅ Question {row_idx + 1} SUCCESSFULLY processed - Answer: '{answer_text[:100]}...'")
                             
+                            # Display formatted agent conversation if callback provided
+                            if self.agent_conversation_callback and result.answer.agent_reasoning:
+                                self.agent_conversation_callback(
+                                    result.answer.agent_reasoning,
+                                    result.answer.documentation_links
+                                )
+                            
                             self._emit_event('CELL_COMPLETED', {
                                 'sheet_index': sheet_idx,
                                 'row_index': row_idx,
@@ -139,6 +149,14 @@ class ExcelProcessor:
                             sheet_data.mark_completed(row_idx, error_text)
                             
                             logger.error(f"❌ Question {row_idx + 1} FAILED - Error: {result.error_message}")
+                            
+                            # Display formatted agent conversation even for failures if available
+                            # This helps understand what went wrong in the agent workflow
+                            if self.agent_conversation_callback and result.answer and result.answer.agent_reasoning:
+                                self.agent_conversation_callback(
+                                    result.answer.agent_reasoning,
+                                    result.answer.documentation_links if result.answer else []
+                                )
                             
                             self._emit_event('CELL_COMPLETED', {
                                 'sheet_index': sheet_idx,

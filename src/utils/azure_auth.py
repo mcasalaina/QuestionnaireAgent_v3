@@ -29,6 +29,7 @@ class AzureAuthenticator:
         """Initialize the Azure authenticator."""
         self._credential = None
         self._client = None
+        self._project_client = None
         self._endpoint_validated = False
     
     async def get_credential(self) -> ChainedTokenCredential:
@@ -157,13 +158,13 @@ class AzureAuthenticator:
             # Create client with proper credential parameter
             from azure.ai.projects.aio import AIProjectClient
             
-            project_client = AIProjectClient(
+            self._project_client = AIProjectClient(
                 endpoint=endpoint,
                 credential=credential
             )
             
             self._client = AzureAIAgentClient(
-                project_client=project_client,
+                project_client=self._project_client,
                 model_deployment_name=model_deployment
             )
             
@@ -189,8 +190,27 @@ class AzureAuthenticator:
         """Reset authentication state to force re-authentication."""
         self._credential = None
         self._client = None
+        self._project_client = None
         self._endpoint_validated = False
         logger.info("Authentication state reset")
+    
+    async def cleanup(self) -> None:
+        """Clean up Azure client resources."""
+        try:
+            if self._client:
+                logger.info("Closing Azure AI Agent client...")
+                await self._client.close()
+                logger.info("Azure AI Agent client closed")
+            
+            if self._project_client:
+                logger.info("Closing Azure AI Project client...")
+                await self._project_client.close()
+                logger.info("Azure AI Project client closed")
+        except Exception as e:
+            logger.warning(f"Error during Azure client cleanup: {e}")
+        finally:
+            self._client = None
+            self._project_client = None
 
 
 # Global authenticator instance

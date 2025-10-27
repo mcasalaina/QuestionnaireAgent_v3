@@ -6,6 +6,7 @@ import threading
 import asyncio
 import queue
 import os
+import concurrent.futures
 from typing import Optional, Callable, Any
 import logging
 from utils.data_types import Question, ProcessingResult, ExcelProcessingResult, WorkbookData, AgentInitState
@@ -40,13 +41,23 @@ AGENT_INIT_POLL_INTERVAL = 0.5  # How often to check initialization status (seco
 class UIManager:
     """Main GUI interface for the questionnaire application."""
     
-    def __init__(self, agent_coordinator = None):
+    def __init__(self, agent_coordinator = None, initial_context: str = None, 
+                 initial_char_limit: int = None, auto_question: str = None,
+                 auto_spreadsheet: str = None):
         """Initialize UI with agent coordinator dependency.
         
         Args:
             agent_coordinator: Pre-initialized agent coordinator (optional).
+            initial_context: Initial context value (optional).
+            initial_char_limit: Initial character limit value (optional).
+            auto_question: Question to process automatically after initialization (optional).
+            auto_spreadsheet: Spreadsheet path to process automatically after initialization (optional).
         """
         self.agent_coordinator = agent_coordinator
+        
+        # Store auto-start settings
+        self.auto_question = auto_question
+        self.auto_spreadsheet = auto_spreadsheet
         
         # Agent initialization state tracking
         self.agent_init_state = AgentInitState.NOT_STARTED
@@ -83,8 +94,8 @@ class UIManager:
         self._temp_workbook_data: Optional[WorkbookData] = None
         
         # Settings
-        self.char_limit_var = tk.IntVar(value=2000)
-        self.context_var = tk.StringVar(value="Microsoft Azure AI")
+        self.char_limit_var = tk.IntVar(value=initial_char_limit if initial_char_limit is not None else 2000)
+        self.context_var = tk.StringVar(value=initial_context if initial_context is not None else "Microsoft Azure AI")
         self.max_retries_var = tk.IntVar(value=10)
         
         self.setup_ui()
@@ -230,23 +241,17 @@ class UIManager:
         answer_frame = ttk.Frame(self.results_notebook)
         self.results_notebook.add(answer_frame, text="Answer")
         
-        answer_label = ttk.Label(answer_frame, text="Answer")
-        answer_label.pack(anchor=tk.W, pady=(5, 5))
-        
         self.answer_display = scrolledtext.ScrolledText(
             answer_frame,
             wrap=tk.WORD,
             font=("Segoe UI", 12),
             state=tk.DISABLED
         )
-        self.answer_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
+        self.answer_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Documentation tab
         docs_frame = ttk.Frame(self.results_notebook)
         self.results_notebook.add(docs_frame, text="Documentation")
-        
-        docs_label = ttk.Label(docs_frame, text="Documentation")
-        docs_label.pack(anchor=tk.W, pady=(5, 5))
         
         self.sources_display = scrolledtext.ScrolledText(
             docs_frame,
@@ -254,14 +259,11 @@ class UIManager:
             font=("Segoe UI", 12),
             state=tk.DISABLED
         )
-        self.sources_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
+        self.sources_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Reasoning tab
         reasoning_frame = ttk.Frame(self.results_notebook)
         self.results_notebook.add(reasoning_frame, text="Reasoning")
-        
-        reasoning_label = ttk.Label(reasoning_frame, text="Agent Reasoning")
-        reasoning_label.pack(anchor=tk.W, pady=(5, 5))
         
         self.reasoning_display = scrolledtext.ScrolledText(
             reasoning_frame,
@@ -270,7 +272,7 @@ class UIManager:
             state=tk.DISABLED,
             bg="white"  # White background for better readability
         )
-        self.reasoning_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
+        self.reasoning_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Configure text tags for colored agent names
         self.reasoning_display.tag_configure("agent_name_black", foreground="black", font=("Segoe UI", 11, "bold"))
@@ -532,7 +534,12 @@ class UIManager:
             # Process workbook (import ExcelProcessor lazily)
             self.update_reasoning("Starting question processing...")
             from excel.processor import ExcelProcessor
-            processor = ExcelProcessor(self.agent_coordinator, self.ui_update_queue, self.update_reasoning)
+            processor = ExcelProcessor(
+                self.agent_coordinator, 
+                self.ui_update_queue, 
+                self.update_reasoning,
+                self._display_agent_conversation
+            )
             result = await processor.process_workbook(
                 workbook_data,
                 self.context_var.get(),
@@ -1088,18 +1095,34 @@ class UIManager:
         """Clean up resources before closing."""
         if self.agent_coordinator:
             try:
-                # Use the asyncio runner for cleanup
-                def cleanup_complete():
-                    logger.info("Agent cleanup completed")
+                # Run cleanup synchronously to ensure it completes before window closes
+                logger.info("Starting agent cleanup...")
+                
+                # Create a future to track completion
+                cleanup_future = concurrent.futures.Future()
+                
+                def cleanup_complete(result):
+                    logger.info(f"Agent cleanup completed successfully: {result}")
+                    cleanup_future.set_result(True)
                 
                 def cleanup_error(e):
                     logger.warning(f"Error during agent cleanup: {e}")
+                    cleanup_future.set_exception(e)
                 
                 self.asyncio_runner.run_coroutine(
                     self.agent_coordinator.cleanup_agents(),
-                    callback=lambda _: cleanup_complete(),
+                    callback=cleanup_complete,
                     error_callback=cleanup_error
                 )
+                
+                # Wait for cleanup to complete (with timeout)
+                try:
+                    cleanup_future.result(timeout=5.0)
+                except concurrent.futures.TimeoutError:
+                    logger.warning("Agent cleanup timed out after 5 seconds")
+                except Exception as e:
+                    logger.warning(f"Agent cleanup failed: {e}")
+                    
             except Exception as e:
                 logger.warning(f"Error during cleanup: {e}")
         
@@ -1172,7 +1195,56 @@ class UIManager:
         self.status_manager.set_status("Agent initialization failed", "error")
         self.update_reasoning(f"❌ Agent initialization failed: {error}")
         logger.error(f"Agent initialization failed: {error}", exc_info=True)
-
+    
+    def _check_and_auto_start(self) -> None:
+        """Check if agents are ready and start auto-processing if requested."""
+        if self.agent_init_state == AgentInitState.IN_PROGRESS:
+            # Still initializing, check again later
+            self.root.after(500, self._check_and_auto_start)
+            return
+        
+        if self.agent_init_state == AgentInitState.FAILED:
+            # Initialization failed, cannot auto-start
+            logger.error("Cannot auto-start: agent initialization failed")
+            self.update_reasoning("❌ Cannot auto-start: agent initialization failed")
+            return
+        
+        if self.agent_init_state == AgentInitState.COMPLETED:
+            # Agents ready, start auto-processing
+            if self.auto_spreadsheet:
+                self.update_reasoning(f"Auto-starting spreadsheet processing: {self.auto_spreadsheet}")
+                self._auto_start_spreadsheet()
+            elif self.auto_question:
+                # Set the question in the entry field
+                self.question_entry.delete("1.0", tk.END)
+                self.question_entry.insert("1.0", self.auto_question)
+                self.update_reasoning(f"Auto-starting question processing: {self.auto_question}")
+                self._on_ask_clicked()
+    
+    def _auto_start_spreadsheet(self) -> None:
+        """Start spreadsheet processing automatically."""
+        if not self.auto_spreadsheet:
+            return
+        
+        file_path = self.auto_spreadsheet
+        
+        # Validate file exists
+        if not os.path.exists(file_path):
+            logger.error(f"Auto-start spreadsheet file not found: {file_path}")
+            self.display_error("file_not_found", f"Spreadsheet file not found: {file_path}")
+            return
+        
+        # Load and display Excel file immediately on main thread
+        try:
+            self._load_and_display_excel_sync(file_path)
+            
+            # Then start async processing in background
+            self._set_processing_state(True)
+            self._start_async_excel_processing(file_path)
+            
+        except Exception as e:
+            logger.error(f"Error auto-starting Excel file: {e}", exc_info=True)
+            self.display_error("excel_load_error", f"Failed to load Excel file: {str(e)}")
     
     async def _ensure_agents_ready(self) -> None:
         """Ensure agents are initialized, waiting if necessary.
@@ -1246,5 +1318,9 @@ class UIManager:
         
         # Start agent initialization in background
         self._start_agent_initialization()
+        
+        # Schedule auto-start processing if requested
+        if self.auto_question or self.auto_spreadsheet:
+            self.root.after(500, self._check_and_auto_start)
         
         self.root.mainloop()

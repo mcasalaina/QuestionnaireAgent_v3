@@ -97,7 +97,7 @@ class AgentCoordinator:
         self, 
         question: Question,
         progress_callback: Callable[[str, str, float], None],
-        reasoning_callback: Callable[[str], None] = None
+        reasoning_callback: Optional[Callable[[str], None]] = None
     ) -> ProcessingResult:
         """Execute multi-agent workflow for single question.
         
@@ -251,7 +251,7 @@ class AgentCoordinator:
         self, 
         questions: List[Question],
         progress_callback: Callable[[str, str, float], None],
-        reasoning_callback: Callable[[str], None] = None
+        reasoning_callback: Optional[Callable[[str], None]] = None
     ) -> List[ProcessingResult]:
         """Execute multi-agent workflow for multiple questions.
         
@@ -352,9 +352,11 @@ class AgentCoordinator:
         return health_status
     
     async def cleanup_agents(self) -> None:
-        """Clean up Azure AI agent resources using FoundryAgentSession."""
+        """Clean up Azure AI agent resources and close the Azure client."""
         try:
-            # Clean up individual executors
+            # Clean up individual executors (this will reset local agent references)
+            logger.info("Starting agent cleanup - the Microsoft Agent Framework will handle Azure AI Foundry cleanup when the client is closed...")
+            
             if self.question_answerer:
                 await self.question_answerer.cleanup()
             
@@ -364,6 +366,26 @@ class AgentCoordinator:
             # Temporarily commented out since link_checker is disabled
             # if self.link_checker:
             #     await self.link_checker.cleanup()
+            
+            logger.info("Local agent references cleaned up")
+            
+            # Close the Azure client - this triggers automatic cleanup of all agents in Azure AI Foundry
+            if self.azure_client:
+                try:
+                    logger.info("Closing Azure AI Agent client - this will automatically delete agents from Azure AI Foundry...")
+                    await self.azure_client.close()
+                    logger.info("Azure AI Agent client closed successfully - agents automatically deleted from Azure AI Foundry")
+                except Exception as e:
+                    logger.warning(f"Error closing Azure client: {e}")
+            
+            # Also cleanup the global Azure authenticator
+            try:
+                from utils.azure_auth import azure_authenticator
+                logger.info("Cleaning up Azure authenticator...")
+                await azure_authenticator.cleanup()
+                logger.info("Azure authenticator cleaned up successfully")
+            except Exception as e:
+                logger.warning(f"Error cleaning up Azure authenticator: {e}")
             
             # Reset state
             self.workflow = None

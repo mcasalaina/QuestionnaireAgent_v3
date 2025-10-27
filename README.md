@@ -1,6 +1,8 @@
 # Questionnaire Multiagent Application
 
-A windowed application that orchestrates three Azure AI Foundry agents to answer questions with fact-checking and link validation. Features both individual question processing and Excel import/export functionality, with a legacy command-line interface also available.
+**Version 3** - A windowed application that orchestrates three Azure AI Foundry agents to answer questions with fact-checking and link validation. Features both individual question processing and Excel import/export functionality, with a legacy command-line interface also available.
+
+Originally created by Marco Casalaina. This version was authored using [GitHub Copilot Agent](https://github.com/features/copilot), the [Microsoft Agent Framework](https://github.com/microsoft/azureai-agent-framework), and [Spec Kit](https://github.com/microsoft/spec).
 
 ## Overview
 
@@ -15,13 +17,13 @@ If either checker rejects the answer, the Question Answerer reformulates and the
 ## Features
 
 - **Windowed GUI**: User-friendly interface built with Python tkinter
+- **Command Line Options**: Configure settings and auto-start processing from the command line
 - **Excel Integration**: Import questions from Excel files and export results
 - **Real-time Progress**: Live reasoning display showing agent workflow
 - **Character Limit Control**: Configurable answer length with automatic retries
 - **Web Grounding**: All agents use Bing search via Azure AI Foundry
 - **Multi-agent Validation**: Three-stage validation ensures answer quality
 - **Source Verification**: All cited URLs are checked for reachability and relevance
-- **Legacy CLI Support**: Command-line interface still available for automation
 
 ## Installation
 
@@ -39,7 +41,19 @@ If you prefer to authenticate before starting the app, you can:
 
 ### Install Dependencies
 
+Create and activate a virtual environment, then install the required dependencies:
+
 ```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
@@ -53,10 +67,49 @@ pip install -e .
 
 ### Primary GUI Application
 
-Run the main windowed application:
+Ensure your virtual environment is activated, then run the main windowed application:
 
 ```bash
-python question_answerer.py
+python run_app.py
+```
+
+#### Command Line Options
+
+The application supports command line options to configure settings and auto-start processing:
+
+**Configure Settings:**
+```bash
+# Set context (default: "Microsoft Azure AI")
+python run_app.py --context "Custom Context"
+
+# Set character limit (default: 2000)
+python run_app.py --charlimit 3000
+
+# Combine both
+python run_app.py --context "Azure Services" --charlimit 1500
+```
+
+**Auto-start Question Processing:**
+```bash
+# Process a question immediately after initialization
+python run_app.py --question "What types of text-to-speech do you offer?"
+
+# With custom settings
+python run_app.py --context "Microsoft Azure AI" --charlimit 2000 --question "How many languages does your TTS service support?"
+```
+
+**Auto-start Spreadsheet Processing:**
+```bash
+# Process an Excel file immediately after initialization
+python run_app.py --spreadsheet ./tests/sample_questionnaire_1_sheet.xlsx
+
+# With custom settings
+python run_app.py --context "Azure AI" --charlimit 1500 --spreadsheet ./path/to/questionnaire.xlsx
+```
+
+**View All Options:**
+```bash
+python run_app.py --help
 ```
 
 **Single Question Mode:**
@@ -72,19 +125,6 @@ python question_answerer.py
 3. System auto-detects question columns
 4. Monitor real-time processing progress
 5. Choose save location when complete
-
-### Legacy CLI Interface
-
-For automation and scripting:
-
-```bash
-python main.py "Why is the sky blue?"
-```
-
-With verbose logging:
-```bash
-python main.py "What are the benefits of renewable energy?" --verbose
-```
 
 ## Example Output
 
@@ -228,17 +268,22 @@ The tool uses Azure AI Foundry with integrated Bing search grounding. For altern
 ### Project Structure
 
 ```text
-QuestionnaireAgent_v2/
-├── question_answerer.py         # Main GUI application
-├── main.py                      # Legacy CLI entry point
-├── agents/                      # Agent implementations
-│   ├── __init__.py
-│   ├── question_answerer.py
-│   ├── answer_checker.py
-│   └── link_checker.py
-├── utils/                       # Shared utilities
-│   ├── __init__.py
-│   ├── logger.py
+QuestionnaireAgent_v3/
+├── run_app.py                   # Main application entry point
+├── src/
+│   ├── agents/                  # Agent implementations
+│   │   ├── __init__.py
+│   │   ├── workflow_manager.py
+│   ├── ui/                      # GUI components
+│   │   ├── main_window.py
+│   │   └── ...
+│   ├── excel/                   # Excel processing
+│   │   ├── loader.py
+│   │   ├── processor.py
+│   │   └── column_identifier.py
+│   ├── utils/                   # Shared utilities
+│   │   ├── __init__.py
+│   │   ├── logger.py
 │   ├── resource_manager.py      # Azure AI Foundry resource management
 │   └── web_search.py
 ├── tests/                       # Test suite
@@ -259,7 +304,7 @@ To extend the system:
 
 ## License
 
-MIT License - see LICENSE file for details
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
