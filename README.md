@@ -2,7 +2,7 @@
 
 **Version 3** - A windowed application that orchestrates three Azure AI Foundry agents to answer questions with fact-checking and link validation. Features both individual question processing and Excel import/export functionality, with a legacy command-line interface also available.
 
-This version was authored using [GitHub Copilot Agent](https://github.com/features/copilot), the [Microsoft Agent Framework](https://github.com/microsoft/azureai-agent-framework), and [Spec Kit](https://github.com/microsoft/spec).
+Originally created by Marco Casalaina. This version was authored using [GitHub Copilot Agent](https://github.com/features/copilot), the [Microsoft Agent Framework](https://github.com/microsoft/azureai-agent-framework), and [Spec Kit](https://github.com/microsoft/spec).
 
 ## Overview
 
@@ -278,7 +278,7 @@ To extend the system:
 
 ## License
 
-MIT License - see LICENSE file for details
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
