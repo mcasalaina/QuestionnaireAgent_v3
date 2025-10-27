@@ -118,7 +118,8 @@ class ExcelProcessor:
                         result = await self.agent_coordinator.process_question(
                             question,
                             progress_callback,
-                            reasoning_callback
+                            reasoning_callback,
+                            self.agent_conversation_callback
                         )
                         
                         if result.success and result.answer:

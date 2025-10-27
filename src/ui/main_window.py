@@ -508,7 +508,12 @@ class UIManager:
         )
         
         # Process with progress updates
-        return await self.agent_coordinator.process_question(question, self.update_progress, self.update_reasoning)
+        return await self.agent_coordinator.process_question(
+            question, 
+            self.update_progress, 
+            self.update_reasoning,
+            self._display_agent_conversation
+        )
     
     async def _process_excel_agents(self, file_path: str) -> ExcelProcessingResult:
         """Process Excel file with agents (async - UI already loaded)."""
