@@ -230,23 +230,17 @@ class UIManager:
         answer_frame = ttk.Frame(self.results_notebook)
         self.results_notebook.add(answer_frame, text="Answer")
         
-        answer_label = ttk.Label(answer_frame, text="Answer")
-        answer_label.pack(anchor=tk.W, pady=(5, 5))
-        
         self.answer_display = scrolledtext.ScrolledText(
             answer_frame,
             wrap=tk.WORD,
             font=("Segoe UI", 12),
             state=tk.DISABLED
         )
-        self.answer_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
+        self.answer_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Documentation tab
         docs_frame = ttk.Frame(self.results_notebook)
         self.results_notebook.add(docs_frame, text="Documentation")
-        
-        docs_label = ttk.Label(docs_frame, text="Documentation")
-        docs_label.pack(anchor=tk.W, pady=(5, 5))
         
         self.sources_display = scrolledtext.ScrolledText(
             docs_frame,
@@ -254,14 +248,11 @@ class UIManager:
             font=("Segoe UI", 12),
             state=tk.DISABLED
         )
-        self.sources_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
+        self.sources_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Reasoning tab
         reasoning_frame = ttk.Frame(self.results_notebook)
         self.results_notebook.add(reasoning_frame, text="Reasoning")
-        
-        reasoning_label = ttk.Label(reasoning_frame, text="Agent Reasoning")
-        reasoning_label.pack(anchor=tk.W, pady=(5, 5))
         
         self.reasoning_display = scrolledtext.ScrolledText(
             reasoning_frame,
@@ -270,7 +261,7 @@ class UIManager:
             state=tk.DISABLED,
             bg="white"  # White background for better readability
         )
-        self.reasoning_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
+        self.reasoning_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Configure text tags for colored agent names
         self.reasoning_display.tag_configure("agent_name_black", foreground="black", font=("Segoe UI", 11, "bold"))
