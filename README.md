@@ -1,6 +1,8 @@
 # Questionnaire Multiagent Application
 
-A windowed application that orchestrates three Azure AI Foundry agents to answer questions with fact-checking and link validation. Features both individual question processing and Excel import/export functionality, with a legacy command-line interface also available.
+**Version 3** - A windowed application that orchestrates three Azure AI Foundry agents to answer questions with fact-checking and link validation. Features both individual question processing and Excel import/export functionality, with a legacy command-line interface also available.
+
+This version was authored using [GitHub Copilot Agent](https://github.com/features/copilot), the [Microsoft Agent Framework](https://github.com/microsoft/azureai-agent-framework), and [Spec Kit](https://github.com/microsoft/spec).
 
 ## Overview
 
@@ -39,7 +41,19 @@ If you prefer to authenticate before starting the app, you can:
 
 ### Install Dependencies
 
+Create and activate a virtual environment, then install the required dependencies:
+
 ```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
@@ -53,10 +67,17 @@ pip install -e .
 
 ### Primary GUI Application
 
-Run the main windowed application:
+Ensure your virtual environment is activated, then run the main windowed application:
 
 ```bash
-python question_answerer.py
+# Activate virtual environment if not already activated
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# Run the application
+python run_app.py
 ```
 
 **Single Question Mode:**
@@ -226,8 +247,8 @@ The tool uses Azure AI Foundry with integrated Bing search grounding. For altern
 ### Project Structure
 
 ```text
-QuestionnaireAgent_v2/
-├── question_answerer.py         # Main GUI application
+QuestionnaireAgent_v3/
+├── run_app.py                   # Main application entry point
 ├── main.py                      # Legacy CLI entry point
 ├── agents/                      # Agent implementations
 │   ├── __init__.py
