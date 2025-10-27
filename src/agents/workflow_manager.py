@@ -350,7 +350,7 @@ class AgentCoordinator:
         return health_status
     
     async def cleanup_agents(self) -> None:
-        """Clean up Azure AI agent resources using FoundryAgentSession."""
+        """Clean up Azure AI agent resources and close the Azure client."""
         try:
             # Clean up individual executors
             if self.question_answerer:
@@ -362,6 +362,24 @@ class AgentCoordinator:
             # Temporarily commented out since link_checker is disabled
             # if self.link_checker:
             #     await self.link_checker.cleanup()
+            
+            # Close the Azure client to properly clean up all agents
+            if self.azure_client:
+                try:
+                    logger.info("Closing Azure AI Agent client to clean up agents...")
+                    await self.azure_client.close()
+                    logger.info("Azure AI Agent client closed successfully")
+                except Exception as e:
+                    logger.warning(f"Error closing Azure client: {e}")
+            
+            # Also cleanup the global Azure authenticator
+            try:
+                from utils.azure_auth import azure_authenticator
+                logger.info("Cleaning up Azure authenticator...")
+                await azure_authenticator.cleanup()
+                logger.info("Azure authenticator cleaned up successfully")
+            except Exception as e:
+                logger.warning(f"Error cleaning up Azure authenticator: {e}")
             
             # Reset state
             self.workflow = None

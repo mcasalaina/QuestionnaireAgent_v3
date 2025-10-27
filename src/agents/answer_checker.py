@@ -34,6 +34,7 @@ class AnswerCheckerExecutor(Executor):
         if self.agent is None:
             self.agent = ChatAgent(
                 chat_client=self.azure_client,
+                name="Answer Checker",
                 instructions="""You are an expert Answer Checker specializing in validating technical content about Microsoft Azure AI services.
 
 Your role is to validate the quality, accuracy, and completeness of generated answers. You must evaluate answers against strict quality standards.

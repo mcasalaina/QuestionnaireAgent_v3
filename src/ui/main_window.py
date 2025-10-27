@@ -1088,18 +1088,35 @@ class UIManager:
         """Clean up resources before closing."""
         if self.agent_coordinator:
             try:
-                # Use the asyncio runner for cleanup
-                def cleanup_complete():
-                    logger.info("Agent cleanup completed")
+                # Run cleanup synchronously to ensure it completes before window closes
+                logger.info("Starting agent cleanup...")
+                
+                # Create a future to track completion
+                import concurrent.futures
+                cleanup_future = concurrent.futures.Future()
+                
+                def cleanup_complete(_):
+                    logger.info("Agent cleanup completed successfully")
+                    cleanup_future.set_result(True)
                 
                 def cleanup_error(e):
                     logger.warning(f"Error during agent cleanup: {e}")
+                    cleanup_future.set_exception(e)
                 
                 self.asyncio_runner.run_coroutine(
                     self.agent_coordinator.cleanup_agents(),
-                    callback=lambda _: cleanup_complete(),
+                    callback=cleanup_complete,
                     error_callback=cleanup_error
                 )
+                
+                # Wait for cleanup to complete (with timeout)
+                try:
+                    cleanup_future.result(timeout=5.0)
+                except concurrent.futures.TimeoutError:
+                    logger.warning("Agent cleanup timed out after 5 seconds")
+                except Exception as e:
+                    logger.warning(f"Agent cleanup failed: {e}")
+                    
             except Exception as e:
                 logger.warning(f"Error during cleanup: {e}")
         

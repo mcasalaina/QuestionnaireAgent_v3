@@ -35,6 +35,7 @@ class QuestionAnswererExecutor(Executor):
         if self.agent is None:
             self.agent = ChatAgent(
                 chat_client=self.azure_client,
+                name="Question Answerer",
                 instructions="""You are an expert Question Answerer specializing in Microsoft Azure AI services and technologies.
 
 Your role is to provide comprehensive, accurate answers to technical questions about Azure AI. Use web search to find current, authoritative information.
