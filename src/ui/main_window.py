@@ -6,6 +6,7 @@ import threading
 import asyncio
 import queue
 import os
+import concurrent.futures
 from typing import Optional, Callable, Any
 import logging
 from utils.data_types import Question, ProcessingResult, ExcelProcessingResult, WorkbookData, AgentInitState
@@ -1092,11 +1093,10 @@ class UIManager:
                 logger.info("Starting agent cleanup...")
                 
                 # Create a future to track completion
-                import concurrent.futures
                 cleanup_future = concurrent.futures.Future()
                 
-                def cleanup_complete(_):
-                    logger.info("Agent cleanup completed successfully")
+                def cleanup_complete(result):
+                    logger.info(f"Agent cleanup completed successfully: {result}")
                     cleanup_future.set_result(True)
                 
                 def cleanup_error(e):
