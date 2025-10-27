@@ -8,7 +8,7 @@ from agent_framework import WorkflowBuilder, Workflow
 from agent_framework_azure_ai import AzureAIAgentClient
 from utils.data_types import (
     Question, Answer, ProcessingResult, AgentStep, 
-    ValidationStatus, HealthStatus
+    ValidationStatus, HealthStatus, DocumentationLink
 )
 from utils.logger import log_workflow_progress, create_span
 from utils.exceptions import (
@@ -97,13 +97,16 @@ class AgentCoordinator:
         self, 
         question: Question,
         progress_callback: Callable[[str, str, float], None],
-        reasoning_callback: Optional[Callable[[str], None]] = None
+        reasoning_callback: Optional[Callable[[str], None]] = None,
+        agent_conversation_callback: Optional[Callable[[List[AgentStep], Optional[List[DocumentationLink]]], None]] = None
     ) -> ProcessingResult:
         """Execute multi-agent workflow for single question.
         
         Args:
             question: Question with context and limits.
             progress_callback: Function to report workflow progress.
+            reasoning_callback: Optional callback for plain text reasoning updates.
+            agent_conversation_callback: Optional callback for displaying formatted agent conversation.
             
         Returns:
             ProcessingResult with validated answer or failure details.
@@ -195,6 +198,14 @@ class AgentCoordinator:
                             logger.info(verbose_msg)
                             if reasoning_callback:
                                 reasoning_callback(verbose_msg)
+                            
+                            # Display the agent conversation in rich text format (including the rejection)
+                            if agent_conversation_callback and workflow_result.get("agent_steps"):
+                                agent_conversation_callback(
+                                    workflow_result.get("agent_steps", []),
+                                    workflow_result.get("documentation_links", [])
+                                )
+                            
                             progress_callback("workflow", f"Answer rejected, retrying... ({retry_count}/{question.max_retries})", 0.2)
                             
                             # Brief delay before retry
@@ -251,13 +262,16 @@ class AgentCoordinator:
         self, 
         questions: List[Question],
         progress_callback: Callable[[str, str, float], None],
-        reasoning_callback: Optional[Callable[[str], None]] = None
+        reasoning_callback: Optional[Callable[[str], None]] = None,
+        agent_conversation_callback: Optional[Callable[[List[AgentStep], Optional[List[DocumentationLink]]], None]] = None
     ) -> List[ProcessingResult]:
         """Execute multi-agent workflow for multiple questions.
         
         Args:
             questions: List of questions to process.
             progress_callback: Function to report batch progress.
+            reasoning_callback: Optional callback for plain text reasoning updates.
+            agent_conversation_callback: Optional callback for displaying formatted agent conversation.
             
         Returns:
             List of ProcessingResult for each question.
@@ -286,7 +300,7 @@ class AgentCoordinator:
                     progress_callback(agent, message, overall_progress)
                 
                 # Process the individual question
-                result = await self.process_question(question, individual_progress, reasoning_callback)
+                result = await self.process_question(question, individual_progress, reasoning_callback, agent_conversation_callback)
                 results.append(result)
                 
                 logger.info(f"Question {i+1}/{total_questions} completed: {'SUCCESS' if result.success else 'FAILED'}")
