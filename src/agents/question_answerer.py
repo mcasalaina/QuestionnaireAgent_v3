@@ -33,9 +33,13 @@ class QuestionAnswererExecutor(Executor):
     async def _get_agent(self) -> ChatAgent:
         """Get or create the question answerer agent."""
         if self.agent is None:
-            self.agent = ChatAgent(
-                chat_client=self.azure_client,
-                instructions="""You are an expert Question Answerer specializing in Microsoft Azure AI services and technologies.
+            # Create the agent and track its ID for cleanup
+            try:
+                # Create ChatAgent directly with Azure client
+                self.agent = ChatAgent(
+                    chat_client=self.azure_client,
+                    name="Question Answerer",
+                    instructions="""You are an expert Question Answerer specializing in Microsoft Azure AI services and technologies.
 
 Your role is to provide comprehensive, accurate answers to technical questions about Azure AI. Use web search to find current, authoritative information.
 
@@ -71,7 +75,12 @@ When answering questions:
 5. Include relevant documentation links at the end
 
 Remember to stay focused on Azure AI technologies and provide authoritative, helpful information in plain text format only."""
-            )
+                )
+                
+            except Exception as e:
+                logger.error(f"Failed to create Question Answerer agent: {e}")
+                raise
+                
         return self.agent
     
     @handler
@@ -337,6 +346,14 @@ Please provide a comprehensive answer in plain text with supporting documentatio
     async def cleanup(self) -> None:
         """Clean up resources used by the executor."""
         if self.agent:
-            # Agent cleanup is handled automatically by the framework
-            logger.debug("Question Answerer executor cleanup completed")
-            self.agent = None
+            # Log cleanup for debugging
+            logger.info("Cleaning up Question Answerer agent...")
+            try:
+                # The Microsoft Agent Framework handles agent lifecycle automatically
+                # when the underlying AzureAIAgentClient is closed
+                logger.debug("Question Answerer agent cleanup completed")
+            except Exception as e:
+                logger.warning(f"Error during Question Answerer cleanup: {e}")
+            finally:
+                self.agent = None
+                self.agent_id = None
