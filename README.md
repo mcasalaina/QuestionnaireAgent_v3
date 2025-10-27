@@ -17,13 +17,13 @@ If either checker rejects the answer, the Question Answerer reformulates and the
 ## Features
 
 - **Windowed GUI**: User-friendly interface built with Python tkinter
+- **Command Line Options**: Configure settings and auto-start processing from the command line
 - **Excel Integration**: Import questions from Excel files and export results
 - **Real-time Progress**: Live reasoning display showing agent workflow
 - **Character Limit Control**: Configurable answer length with automatic retries
 - **Web Grounding**: All agents use Bing search via Azure AI Foundry
 - **Multi-agent Validation**: Three-stage validation ensures answer quality
 - **Source Verification**: All cited URLs are checked for reachability and relevance
-- **Legacy CLI Support**: Command-line interface still available for automation
 
 ## Installation
 
@@ -70,14 +70,46 @@ pip install -e .
 Ensure your virtual environment is activated, then run the main windowed application:
 
 ```bash
-# Activate virtual environment if not already activated
-# On Windows:
-venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
-
-# Run the application
 python run_app.py
+```
+
+#### Command Line Options
+
+The application supports command line options to configure settings and auto-start processing:
+
+**Configure Settings:**
+```bash
+# Set context (default: "Microsoft Azure AI")
+python run_app.py --context "Custom Context"
+
+# Set character limit (default: 2000)
+python run_app.py --charlimit 3000
+
+# Combine both
+python run_app.py --context "Azure Services" --charlimit 1500
+```
+
+**Auto-start Question Processing:**
+```bash
+# Process a question immediately after initialization
+python run_app.py --question "What types of text-to-speech do you offer?"
+
+# With custom settings
+python run_app.py --context "Microsoft Azure AI" --charlimit 2000 --question "How many languages does your TTS service support?"
+```
+
+**Auto-start Spreadsheet Processing:**
+```bash
+# Process an Excel file immediately after initialization
+python run_app.py --spreadsheet ./tests/sample_questionnaire_1_sheet.xlsx
+
+# With custom settings
+python run_app.py --context "Azure AI" --charlimit 1500 --spreadsheet ./path/to/questionnaire.xlsx
+```
+
+**View All Options:**
+```bash
+python run_app.py --help
 ```
 
 **Single Question Mode:**
@@ -93,19 +125,6 @@ python run_app.py
 3. System auto-detects question columns
 4. Monitor real-time processing progress
 5. Choose save location when complete
-
-### Legacy CLI Interface
-
-For automation and scripting:
-
-```bash
-python main.py "Why is the sky blue?"
-```
-
-With verbose logging:
-```bash
-python main.py "What are the benefits of renewable energy?" --verbose
-```
 
 ## Example Output
 
@@ -131,7 +150,7 @@ Sources:
 |-----------|---------------|------------------|
 | **Question Answerer** | Searches the web for evidence, synthesizes a candidate answer | Web search API |
 | **Answer Checker** | Validates factual correctness, completeness, and consistency | Web search API |
-| **Link Checker** | Verifies that every URL cited in the answer is reachable and relevant | HTTP requests + web search |
+| **Link Checker** | Verifies that every URL cited in the answer is reachable and relevant | Browser Automation tool |
 
 ### Workflow
 
@@ -167,6 +186,7 @@ The application requires the following environment variables to be set in your `
 | `AZURE_OPENAI_ENDPOINT` | Azure AI Foundry project endpoint | Azure AI Foundry Portal > Project Overview > Project Details |
 | `AZURE_OPENAI_MODEL_DEPLOYMENT` | Your deployed model name | Azure AI Foundry Portal > Models + Endpoints |
 | `BING_CONNECTION_ID` | Bing Search connection name | Azure AI Foundry Portal > Connected Resources |
+| `BROWSER_AUTOMATION_CONNECTION_ID` | Browser Automation connection name | Azure AI Foundry Portal > Connected Resources |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Application Insights connection string | Azure Portal > Application Insights > Overview |
 | `AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED` | Enable AI content tracing (optional) | Set to `true` or `false` |
 
@@ -176,6 +196,7 @@ The application requires the following environment variables to be set in your `
 AZURE_OPENAI_ENDPOINT=https://your-project.services.ai.azure.com/api/projects/your-project
 AZURE_OPENAI_MODEL_DEPLOYMENT=gpt-4.1
 BING_CONNECTION_ID=your-bing-connection-name
+BROWSER_AUTOMATION_CONNECTION_ID=your-browser-automation-connection-name
 APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=your-key;IngestionEndpoint=https://your-region.in.applicationinsights.azure.com/;LiveEndpoint=https://your-region.livediagnostics.monitor.azure.com/;ApplicationId=your-app-id
 AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED=true
 ```
@@ -249,15 +270,20 @@ The tool uses Azure AI Foundry with integrated Bing search grounding. For altern
 ```text
 QuestionnaireAgent_v3/
 ├── run_app.py                   # Main application entry point
-├── main.py                      # Legacy CLI entry point
-├── agents/                      # Agent implementations
-│   ├── __init__.py
-│   ├── question_answerer.py
-│   ├── answer_checker.py
-│   └── link_checker.py
-├── utils/                       # Shared utilities
-│   ├── __init__.py
-│   ├── logger.py
+├── src/
+│   ├── agents/                  # Agent implementations
+│   │   ├── __init__.py
+│   │   ├── workflow_manager.py
+│   ├── ui/                      # GUI components
+│   │   ├── main_window.py
+│   │   └── ...
+│   ├── excel/                   # Excel processing
+│   │   ├── loader.py
+│   │   ├── processor.py
+│   │   └── column_identifier.py
+│   ├── utils/                   # Shared utilities
+│   │   ├── __init__.py
+│   │   ├── logger.py
 │   ├── resource_manager.py      # Azure AI Foundry resource management
 │   └── web_search.py
 ├── tests/                       # Test suite

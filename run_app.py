@@ -4,6 +4,7 @@
 import sys
 import os
 import asyncio
+import argparse
 from pathlib import Path
 
 # Add the src directory to Python path
@@ -15,8 +16,12 @@ print(f"Python path: {sys.path[:3]}...")
 print("Starting application...")
 
 
-async def initialize_and_run():
-    """Initialize application with authentication check before showing UI."""
+async def initialize_and_run(args):
+    """Initialize application with authentication check before showing UI.
+    
+    Args:
+        args: Parsed command line arguments
+    """
     from utils.azure_auth import test_authentication
     from utils.config import config_manager
     from utils.exceptions import AuthenticationError, ConfigurationError
@@ -53,7 +58,12 @@ async def initialize_and_run():
         
         # Step 3: Initialize and run UI
         print("\nInitializing user interface...")
-        app = UIManager()
+        app = UIManager(
+            initial_context=args.context,
+            initial_char_limit=args.charlimit,
+            auto_question=args.question,
+            auto_spreadsheet=args.spreadsheet
+        )
         print("✓ Application ready")
         print("\nStarting application...\n")
         app.run()
@@ -75,15 +85,59 @@ async def initialize_and_run():
         return 1
 
 
+def parse_arguments():
+    """Parse command line arguments.
+    
+    Returns:
+        argparse.Namespace: Parsed arguments
+    """
+    parser = argparse.ArgumentParser(
+        description="Questionnaire Answerer - Process questions using Microsoft Agent Framework"
+    )
+    
+    parser.add_argument(
+        "--context",
+        type=str,
+        default="Microsoft Azure AI",
+        help="Set the default context (default: Microsoft Azure AI)"
+    )
+    
+    parser.add_argument(
+        "--charlimit",
+        type=int,
+        default=2000,
+        help="Set the default character limit (default: 2000)"
+    )
+    
+    parser.add_argument(
+        "--question",
+        type=str,
+        default=None,
+        help="Question to process immediately after initialization"
+    )
+    
+    parser.add_argument(
+        "--spreadsheet",
+        type=str,
+        default=None,
+        help="Path to Excel spreadsheet to process immediately after initialization"
+    )
+    
+    return parser.parse_args()
+
+
 # Now import and run the application
 if __name__ == "__main__":
     try:
+        # Parse command line arguments
+        args = parse_arguments()
+        
         # Set up event loop policy for Windows
         if sys.platform == "win32":
             asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
         
         # Run async initialization
-        exit_code = asyncio.run(initialize_and_run())
+        exit_code = asyncio.run(initialize_and_run(args))
         sys.exit(exit_code)
         
     except KeyboardInterrupt:
