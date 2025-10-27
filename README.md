@@ -15,13 +15,13 @@ If either checker rejects the answer, the Question Answerer reformulates and the
 ## Features
 
 - **Windowed GUI**: User-friendly interface built with Python tkinter
+- **Command Line Options**: Configure settings and auto-start processing from command line
 - **Excel Integration**: Import questions from Excel files and export results
 - **Real-time Progress**: Live reasoning display showing agent workflow
 - **Character Limit Control**: Configurable answer length with automatic retries
 - **Web Grounding**: All agents use Bing search via Azure AI Foundry
 - **Multi-agent Validation**: Three-stage validation ensures answer quality
 - **Source Verification**: All cited URLs are checked for reachability and relevance
-- **Legacy CLI Support**: Command-line interface still available for automation
 
 ## Installation
 
@@ -56,7 +56,46 @@ pip install -e .
 Run the main windowed application:
 
 ```bash
-python question_answerer.py
+python run_app.py
+```
+
+#### Command Line Options
+
+The application supports command line options to configure settings and auto-start processing:
+
+**Configure Settings:**
+```bash
+# Set context (default: "Microsoft Azure AI")
+python run_app.py --context "Custom Context"
+
+# Set character limit (default: 2000)
+python run_app.py --charlimit 3000
+
+# Combine both
+python run_app.py --context "Azure Services" --charlimit 1500
+```
+
+**Auto-start Question Processing:**
+```bash
+# Process a question immediately after initialization
+python run_app.py --question "What types of text-to-speech do you offer?"
+
+# With custom settings
+python run_app.py --context "Microsoft Azure AI" --charlimit 2000 --question "How many languages does your TTS service support?"
+```
+
+**Auto-start Spreadsheet Processing:**
+```bash
+# Process an Excel file immediately after initialization
+python run_app.py --spreadsheet ./tests/sample_questionnaire_1_sheet.xlsx
+
+# With custom settings
+python run_app.py --context "Azure AI" --charlimit 1500 --spreadsheet ./path/to/questionnaire.xlsx
+```
+
+**View All Options:**
+```bash
+python run_app.py --help
 ```
 
 **Single Question Mode:**
@@ -72,19 +111,6 @@ python question_answerer.py
 3. System auto-detects question columns
 4. Monitor real-time processing progress
 5. Choose save location when complete
-
-### Legacy CLI Interface
-
-For automation and scripting:
-
-```bash
-python main.py "Why is the sky blue?"
-```
-
-With verbose logging:
-```bash
-python main.py "What are the benefits of renewable energy?" --verbose
-```
 
 ## Example Output
 
