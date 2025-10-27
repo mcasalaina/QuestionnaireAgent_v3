@@ -3,6 +3,7 @@
 import logging
 import time
 import asyncio
+import re
 from typing import Any, Dict, Optional
 from agent_framework import Executor, handler, WorkflowContext, ChatAgent, ChatMessage, Role
 from agent_framework_azure_ai import AzureAIAgentClient
@@ -63,19 +64,27 @@ EVALUATION CRITERIA:
 RESPONSE FORMAT:
 You MUST start your response with either "LINKS_VALID:" or "LINKS_INVALID:" followed by your analysis.
 
+For each link in your analysis, please structure your feedback clearly:
+- State the URL
+- Indicate if it loaded successfully or not
+- If loaded, briefly describe what content you found
+- Explain how the content relates (or doesn't relate) to the answer
+- Note if it's from an official Microsoft source
+
 If LINKS_VALID:
 - Confirm that links are accessible and relevant
-- Highlight how each link's content supports the answer
+- For each link, highlight how its content supports the answer
 - Mention key information found on each page that validates the answer
 
 If LINKS_INVALID:
 - Specify which links are problematic and why
-- For inaccessible links: explain what error occurred
-- For irrelevant links: explain why the content doesn't match the answer
+- For inaccessible links: clearly state "not accessible" or "unreachable"
+- For irrelevant links: clearly state "not relevant" or "irrelevant" and explain why the content doesn't match
 - Suggest what type of links would be more appropriate
 
 IMPORTANT:
 - Use the browser automation tool to actually visit and inspect each link
+- Be explicit and clear when a link has issues (use phrases like "not accessible", "irrelevant", etc.)
 - Focus on official Microsoft documentation sources
 - Verify that page content is current and authoritative
 - Be specific about what you found on each page
@@ -208,7 +217,6 @@ IMPORTANT:
                 
                 await ctx.yield_output(error_result)
                 raise AgentExecutionError(error_message) from e
-    
     def _extract_link_results(self, urls: list[str], validation_result: str, 
                               links_valid: bool) -> list[DocumentationLink]:
         """Extract link validation results from the agent's response.
@@ -235,8 +243,11 @@ IMPORTANT:
             result_lower = validation_result.lower()
             
             # Check if the URL is specifically mentioned as problematic
+            # Note: This is heuristic-based parsing. For production use, consider
+            # requesting structured JSON output from the agent for more reliable parsing.
             if url in validation_result or url_lower in result_lower:
                 # Look for negative indicators near the URL mention
+                # These patterns help identify link-specific issues
                 if any(indicator in result_lower for indicator in 
                        ['not accessible', 'broken', 'error', 'failed', 'inaccessible', 
                         'unreachable', 'not found', '404', 'invalid']):
@@ -254,17 +265,18 @@ IMPORTANT:
                 context = validation_result[max(0, url_pos-200):min(len(validation_result), url_pos+200)]
                 if 'title:' in context.lower():
                     # Extract text after "title:" or "Title:"
-                    import re
                     title_match = re.search(r'[Tt]itle:\s*([^\n\r\.]+)', context)
                     if title_match:
                         title = title_match.group(1).strip()
             
+            # Note: Browser automation tool doesn't directly provide HTTP status codes
+            # Setting http_status to None to accurately reflect that we don't have this information
             results.append(DocumentationLink(
                 url=url,
                 title=title,
                 is_reachable=is_reachable,
                 is_relevant=is_relevant,
-                http_status=200 if is_reachable else None,
+                http_status=None,  # Browser automation doesn't provide HTTP status codes
                 validation_error=None if is_reachable else "Link validation failed via browser automation"
             ))
         
