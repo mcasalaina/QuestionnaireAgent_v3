@@ -28,6 +28,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     force=True
 )
+
+# Suppress verbose HTTP logs from Azure SDK
+logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(logging.WARNING)
+logging.getLogger('azure.identity').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 print("\n" + "="*80)
@@ -54,8 +59,8 @@ class TestLiveAzureQuestion:
             print(f"SKIPPING TEST: {validation.error_message}")
             pytest.skip(f"Azure configuration required: {validation.error_message}")
         
-        print("✓ Configuration is valid")
-        logger.info("✓ Configuration is valid")
+        print("OK Configuration is valid")
+        logger.info("OK Configuration is valid")
         
         print("\nStep 2: Creating test question...")
         logger.info("Step 2: Creating test question...")
@@ -68,11 +73,11 @@ class TestLiveAzureQuestion:
             max_retries=3
         )
         
-        print(f"✓ Question created: '{question.text}'")
+        print(f"OK Question created: '{question.text}'")
         print(f"  - Context: {question.context}")
         print(f"  - Char limit: {question.char_limit}")
         print(f"  - Max retries: {question.max_retries}")
-        logger.info(f"✓ Question created: '{question.text}'")
+        logger.info(f"OK Question created: '{question.text}'")
         
         print("\nStep 3: Setting up callbacks...")
         logger.info("Step 3: Setting up callbacks...")
@@ -92,7 +97,7 @@ class TestLiveAzureQuestion:
             print(f"  REASONING: {message}")
             logger.info(f"REASONING: {message}")
         
-        print("✓ Callbacks configured")
+        print("OK Callbacks configured")
         
         print("\nStep 4: Establishing Azure session...")
         logger.info("Step 4: Establishing Azure session...")
@@ -102,8 +107,8 @@ class TestLiveAzureQuestion:
         try:
             print("  - Calling foundry_agent_session()...")
             async with foundry_agent_session() as azure_client:
-                print("✓ Azure session established")
-                logger.info("✓ Azure session established")
+                print("OK Azure session established")
+                logger.info("OK Azure session established")
                 
                 print("\nStep 5: Creating agent coordinator...")
                 logger.info("Step 5: Creating agent coordinator...")
@@ -116,8 +121,8 @@ class TestLiveAzureQuestion:
                     bing_connection_id=config_manager.get_bing_connection_id(),
                     browser_automation_connection_id=config_manager.get_browser_automation_connection_id()
                 )
-                print("✓ Agent coordinator created")
-                logger.info("✓ Agent coordinator created")
+                print("OK Agent coordinator created")
+                logger.info("OK Agent coordinator created")
                 
                 print("\nStep 6: Processing question through workflow...")
                 logger.info("Step 6: Processing question through workflow...")
@@ -129,8 +134,8 @@ class TestLiveAzureQuestion:
                     reasoning_callback=reasoning_callback
                 )
                 
-                print("\n✓ Question processing completed")
-                logger.info("✓ Question processing completed")
+                print("\nOK Question processing completed")
+                logger.info("OK Question processing completed")
                 
                 print("\nStep 7: Analyzing results...")
                 logger.info("Step 7: Analyzing results...")
@@ -181,39 +186,39 @@ class TestLiveAzureQuestion:
                 
                 # Assertions
                 assert result.success, f"Question processing should succeed: {result.error_message}"
-                print("  ✓ Result is successful")
+                print("  OK Result is successful")
                 
                 assert result.answer is not None, "Should receive an answer"
-                print("  ✓ Answer is not None")
+                print("  OK Answer is not None")
                 
                 assert isinstance(result.answer.content, str), "Answer should be a string"
-                print("  ✓ Answer is a string")
+                print("  OK Answer is a string")
                 
                 assert len(result.answer.content) > 50, "Answer should be substantial (>50 chars)"
-                print(f"  ✓ Answer is substantial ({len(result.answer.content)} chars)")
+                print(f"  OK Answer is substantial ({len(result.answer.content)} chars)")
                 
                 # Check that answer mentions relevant concepts
                 answer_lower = result.answer.content.lower()
                 assert 'azure' in answer_lower or 'ai' in answer_lower, \
                     "Answer should mention Azure or AI concepts"
-                print("  ✓ Answer mentions relevant concepts")
+                print("  OK Answer mentions relevant concepts")
                 
                 # Verify validation status
                 assert result.answer.validation_status == ValidationStatus.APPROVED, \
                     f"Answer should be approved, got: {result.answer.validation_status}"
-                print(f"  ✓ Validation status is APPROVED")
+                print(f"  OK Validation status is APPROVED")
                 
                 # Verify agent steps
                 assert len(result.answer.agent_reasoning) >= 2, \
                     "Should have steps from Question Answerer and Answer Checker at minimum"
-                print(f"  ✓ Agent steps recorded ({len(result.answer.agent_reasoning)} steps)")
+                print(f"  OK Agent steps recorded ({len(result.answer.agent_reasoning)} steps)")
                 
                 # Verify progress was tracked
                 assert len(progress_updates) > 0, "Progress callbacks should have been called"
-                print(f"  ✓ Progress tracked ({len(progress_updates)} updates)")
+                print(f"  OK Progress tracked ({len(progress_updates)} updates)")
                 
-                print("\n✓ ALL ASSERTIONS PASSED!")
-                logger.info("✓ All assertions passed!")
+                print("\nOK ALL ASSERTIONS PASSED!")
+                logger.info("OK All assertions passed!")
                 
         finally:
             # Clean up
@@ -221,10 +226,10 @@ class TestLiveAzureQuestion:
             logger.info("Step 9: Cleaning up resources...")
             if coordinator:
                 await coordinator.cleanup_agents()
-                print("✓ Cleanup complete")
-                logger.info("✓ Cleanup complete")
+                print("OK Cleanup complete")
+                logger.info("OK Cleanup complete")
             else:
-                print("✓ No coordinator to clean up")
+                print("OK No coordinator to clean up")
         
         print("\n" + "="*80)
         print("TEST COMPLETED SUCCESSFULLY!")
