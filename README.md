@@ -15,7 +15,7 @@ If either checker rejects the answer, the Question Answerer reformulates and the
 ## Features
 
 - **Windowed GUI**: User-friendly interface built with Python tkinter
-- **Command Line Options**: Configure settings and auto-start processing from command line
+- **Command Line Options**: Configure settings and auto-start processing from the command line
 - **Excel Integration**: Import questions from Excel files and export results
 - **Real-time Progress**: Live reasoning display showing agent workflow
 - **Character Limit Control**: Configurable answer length with automatic retries
@@ -252,17 +252,22 @@ The tool uses Azure AI Foundry with integrated Bing search grounding. For altern
 ### Project Structure
 
 ```text
-QuestionnaireAgent_v2/
-├── question_answerer.py         # Main GUI application
-├── main.py                      # Legacy CLI entry point
-├── agents/                      # Agent implementations
-│   ├── __init__.py
-│   ├── question_answerer.py
-│   ├── answer_checker.py
-│   └── link_checker.py
-├── utils/                       # Shared utilities
-│   ├── __init__.py
-│   ├── logger.py
+QuestionnaireAgent_v3/
+├── run_app.py                   # Main application entry point
+├── src/
+│   ├── agents/                  # Agent implementations
+│   │   ├── __init__.py
+│   │   ├── workflow_manager.py
+│   ├── ui/                      # GUI components
+│   │   ├── main_window.py
+│   │   └── ...
+│   ├── excel/                   # Excel processing
+│   │   ├── loader.py
+│   │   ├── processor.py
+│   │   └── column_identifier.py
+│   ├── utils/                   # Shared utilities
+│   │   ├── __init__.py
+│   │   ├── logger.py
 │   ├── resource_manager.py      # Azure AI Foundry resource management
 │   └── web_search.py
 ├── tests/                       # Test suite
