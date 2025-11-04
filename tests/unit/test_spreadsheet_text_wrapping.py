@@ -2,6 +2,7 @@
 
 import pytest
 import tkinter as tk
+from tkinter import ttk
 from ui.spreadsheet_view import SpreadsheetView
 from utils.data_types import SheetData, CellState
 
@@ -132,7 +133,6 @@ class TestSpreadsheetTextWrapping:
         treeview = view.render()
         
         # Get the style and check row height
-        from tkinter import ttk
         style = ttk.Style()
         rowheight = style.lookup("Treeview", "rowheight")
         
