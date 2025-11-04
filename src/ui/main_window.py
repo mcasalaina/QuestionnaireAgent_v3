@@ -1135,9 +1135,45 @@ class UIManager:
             self.update_reasoning("Stop requested - cancelling spreadsheet processing...")
             self.current_excel_processor.cancel_processing()
             
+            # Process any pending UI events (e.g., CELL_RESET for working cells)
+            if self.workbook_view:
+                self._drain_ui_events()
+            
             # Immediately restore UI state
             self._set_processing_state(False)
             self.status_manager.set_status("Processing cancelled", "info")
+    
+    def _drain_ui_events(self) -> None:
+        """Drain all pending UI events from the queue without waiting for polling.
+        
+        This ensures that CELL_RESET events emitted during cancellation are
+        processed immediately, so working cells are cleared before the UI is restored.
+        """
+        if not self.workbook_view or not self.workbook_view.ui_update_queue:
+            return
+        
+        try:
+            import queue
+            max_events = 100  # Prevent infinite loops
+            events_processed = 0
+            
+            while events_processed < max_events:
+                try:
+                    event = self.workbook_view.ui_update_queue.get_nowait()
+                    self.workbook_view._process_event(event)
+                    events_processed += 1
+                except queue.Empty:
+                    # Queue is empty
+                    break
+                except Exception as e:
+                    logger.error(f"Error processing drained UI event: {e}")
+                    break
+            
+            if events_processed > 0:
+                logger.debug(f"Drained and processed {events_processed} pending UI events")
+        
+        except Exception as e:
+            logger.error(f"Error draining UI events: {e}")
     
     def _clear_results(self) -> None:
         """Clear all result displays."""
