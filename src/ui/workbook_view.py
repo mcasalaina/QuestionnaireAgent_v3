@@ -32,7 +32,8 @@ class WorkbookView:
             parent: Parent tkinter widget
             workbook_data: Complete workbook data
             ui_update_queue: Queue for receiving UI updates
-            cell_completed_callback: Optional callback(cell_index) when a cell completes
+            cell_completed_callback: Optional callback(row_index) called when a cell completes.
+                The row_index parameter is the 0-based cell row index.
         """
         self.parent = parent
         self.workbook_data = workbook_data
@@ -391,9 +392,12 @@ class WorkbookView:
         if 0 <= sheet_idx < len(self.sheet_views):
             self.sheet_views[sheet_idx].update_cell(row_idx, CellState.COMPLETED, answer=answer)
         
-        # Notify status manager that cell completed
+        # Notify status manager that cell completed (with error handling)
         if self.cell_completed_callback:
-            self.cell_completed_callback(row_idx)
+            try:
+                self.cell_completed_callback(row_idx)
+            except Exception as e:
+                logger.error(f"Error in cell completion callback for row {row_idx}: {e}", exc_info=True)
     
     def _handle_cell_reset(self, payload: dict) -> None:
         """Handle CELL_RESET event - reset cell to pending state."""

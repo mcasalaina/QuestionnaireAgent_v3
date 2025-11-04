@@ -91,8 +91,10 @@ class StatusManager:
             agent: Current agent name.
             message: Current activity message.
             progress: Progress value (0.0 to 1.0).
-            sheet_name: Optional sheet name for spreadsheet mode.
-            cell_index: Optional cell row index for spreadsheet mode.
+            sheet_name: Optional sheet name for spreadsheet mode. Both sheet_name and cell_index
+                must be provided together to activate spreadsheet mode tracking.
+            cell_index: Optional 0-based cell row index for spreadsheet mode. Both sheet_name
+                and cell_index must be provided together to activate spreadsheet mode tracking.
         """
         self.current_agent = agent
         self.current_message = message
