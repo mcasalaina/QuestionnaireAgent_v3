@@ -264,7 +264,8 @@ class ParallelExcelProcessor:
         agent_coordinators: List[AgentCoordinator],
         ui_update_queue: UIUpdateQueue,
         reasoning_callback = None,
-        agent_conversation_callback = None
+        agent_conversation_callback = None,
+        progress_callback = None
     ):
         """Initialize parallel processor.
         
@@ -273,6 +274,7 @@ class ParallelExcelProcessor:
             ui_update_queue: Thread-safe queue for UI updates
             reasoning_callback: Optional callback for agent reasoning updates
             agent_conversation_callback: Optional callback for displaying formatted agent conversation
+            progress_callback: Optional callback for progress updates
         """
         if len(agent_coordinators) != 3:
             raise ValueError("ParallelExcelProcessor requires exactly 3 agent coordinators")
@@ -281,6 +283,7 @@ class ParallelExcelProcessor:
         self.ui_queue = ui_update_queue
         self.reasoning_callback = reasoning_callback
         self.agent_conversation_callback = agent_conversation_callback
+        self.progress_callback = progress_callback
         self.cancelled = False
         
         # Lock for thread-safe state updates
