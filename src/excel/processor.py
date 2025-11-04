@@ -39,6 +39,8 @@ class ExcelProcessor:
         self.agent_conversation_callback = agent_conversation_callback
         self.progress_callback = progress_callback
         self.cancelled = False
+        self.current_task: Optional[asyncio.Task] = None
+        self.current_workbook: Optional[WorkbookData] = None
     
     async def process_workbook(
         self,
@@ -62,12 +64,16 @@ class ExcelProcessor:
         total_processed = 0
         total_failed = 0
         
+        # Store workbook reference for cancellation cleanup
+        self.current_workbook = workbook_data
+        
         logger.info(f"Starting Excel workbook processing: {len(workbook_data.sheets)} sheets, {workbook_data.total_questions} total questions")
         
         try:
             for sheet_idx, sheet_data in enumerate(workbook_data.sheets):
                 if self.cancelled:
                     logger.info("Processing cancelled by user")
+                    self._cleanup_working_cells(workbook_data)
                     break
                 
                 # Emit sheet start event
@@ -80,6 +86,7 @@ class ExcelProcessor:
                 # Process each question in the sheet
                 for row_idx, question_text in enumerate(sheet_data.questions):
                     if self.cancelled:
+                        self._cleanup_working_cells(workbook_data)
                         break
                     
                     # Emit cell working event
@@ -121,12 +128,19 @@ class ExcelProcessor:
                                 self.reasoning_callback(reasoning_msg)
                         
                         logger.info(f"🚀 Starting agent processing for question {row_idx + 1}...")
-                        result = await self.agent_coordinator.process_question(
-                            question,
-                            local_progress_callback,
-                            reasoning_callback,
-                            self.agent_conversation_callback
+                        
+                        # Wrap in a task we can cancel
+                        self.current_task = asyncio.create_task(
+                            self.agent_coordinator.process_question(
+                                question,
+                                local_progress_callback,
+                                reasoning_callback,
+                                self.agent_conversation_callback
+                            )
                         )
+                        
+                        result = await self.current_task
+                        self.current_task = None
                         
                         if result.success and result.answer:
                             # Success - emit completed event
@@ -173,6 +187,17 @@ class ExcelProcessor:
                             
                             total_failed += 1
                             logger.warning(f"Failed to process question {row_idx + 1}: {result.error_message}")
+                    
+                    except asyncio.CancelledError:
+                        # Task was cancelled - reset cell to pending
+                        logger.info(f"Question {row_idx + 1} processing cancelled")
+                        sheet_data.cell_states[row_idx] = CellState.PENDING
+                        sheet_data.answers[row_idx] = None
+                        self._emit_event('CELL_CANCELLED', {
+                            'sheet_index': sheet_idx,
+                            'row_index': row_idx
+                        })
+                        raise  # Re-raise to break out of loop
                     
                     except Exception as e:
                         # Exception during processing
@@ -228,9 +253,41 @@ class ExcelProcessor:
             )
     
     def cancel_processing(self) -> None:
-        """Cancel the current processing operation."""
+        """Cancel the current processing operation immediately."""
         self.cancelled = True
         logger.info("Excel processing cancellation requested")
+        
+        # Cancel any running task
+        if self.current_task and not self.current_task.done():
+            logger.info("Cancelling current agent task")
+            self.current_task.cancel()
+        
+        # Clean up any working cells
+        if self.current_workbook:
+            self._cleanup_working_cells(self.current_workbook)
+    
+    def _cleanup_working_cells(self, workbook_data: WorkbookData) -> None:
+        """Reset all working cells back to pending state.
+        
+        Args:
+            workbook_data: Workbook to clean up
+        """
+        logger.info("Cleaning up working cells after cancellation")
+        
+        for sheet_idx, sheet_data in enumerate(workbook_data.sheets):
+            for row_idx, state in enumerate(sheet_data.cell_states):
+                if state == CellState.WORKING:
+                    # Reset to pending
+                    sheet_data.cell_states[row_idx] = CellState.PENDING
+                    sheet_data.answers[row_idx] = None
+                    
+                    # Emit event to update UI
+                    self._emit_event('CELL_RESET', {
+                        'sheet_index': sheet_idx,
+                        'row_index': row_idx
+                    })
+                    
+                    logger.debug(f"Reset cell [{sheet_idx}][{row_idx}] from WORKING to PENDING")
     
     def _emit_event(self, event_type: str, payload: Dict[str, Any]) -> None:
         """Emit UI update event to queue.
@@ -264,7 +321,8 @@ class ParallelExcelProcessor:
         agent_coordinators: List[AgentCoordinator],
         ui_update_queue: UIUpdateQueue,
         reasoning_callback = None,
-        agent_conversation_callback = None
+        agent_conversation_callback = None,
+        progress_callback = None
     ):
         """Initialize parallel processor.
         
@@ -273,6 +331,7 @@ class ParallelExcelProcessor:
             ui_update_queue: Thread-safe queue for UI updates
             reasoning_callback: Optional callback for agent reasoning updates
             agent_conversation_callback: Optional callback for displaying formatted agent conversation
+            progress_callback: Optional callback for progress updates
         """
         if len(agent_coordinators) != 3:
             raise ValueError("ParallelExcelProcessor requires exactly 3 agent coordinators")
@@ -281,7 +340,10 @@ class ParallelExcelProcessor:
         self.ui_queue = ui_update_queue
         self.reasoning_callback = reasoning_callback
         self.agent_conversation_callback = agent_conversation_callback
+        self.progress_callback = progress_callback
         self.cancelled = False
+        self.current_workbook: Optional[WorkbookData] = None
+        self.worker_tasks: List[asyncio.Task] = []
         
         # Lock for thread-safe state updates
         self._state_lock = asyncio.Lock()
@@ -308,12 +370,16 @@ class ParallelExcelProcessor:
         total_processed = 0
         total_failed = 0
         
+        # Store workbook reference for cancellation cleanup
+        self.current_workbook = workbook_data
+        
         logger.info(f"Starting parallel Excel workbook processing: {len(workbook_data.sheets)} sheets, {workbook_data.total_questions} total questions with 3 agent sets")
         
         try:
             for sheet_idx, sheet_data in enumerate(workbook_data.sheets):
                 if self.cancelled:
                     logger.info("Processing cancelled by user")
+                    self._cleanup_working_cells(workbook_data)
                     break
                 
                 # Emit sheet start event
@@ -409,7 +475,7 @@ class ParallelExcelProcessor:
             await work_queue.put(item)
         
         # Create 3 worker tasks, one per agent set
-        workers = [
+        self.worker_tasks = [
             asyncio.create_task(
                 self._agent_set_worker(
                     agent_set_id=i + 1,
@@ -425,7 +491,8 @@ class ParallelExcelProcessor:
         ]
         
         # Wait for all workers to complete
-        results = await asyncio.gather(*workers, return_exceptions=True)
+        results = await asyncio.gather(*self.worker_tasks, return_exceptions=True)
+        self.worker_tasks = []
         
         # Aggregate results
         total_processed = 0
@@ -521,6 +588,11 @@ class ParallelExcelProcessor:
                         progress_msg = f"Agent Set {agent_set_id} - {agent}: {msg} ({progress:.1%})"
                         logger.info(f"📊 {progress_msg}")
                     
+                    # Check for cancellation before processing
+                    if self.cancelled:
+                        logger.info(f"Agent Set {agent_set_id} stopping due to cancellation")
+                        break
+                    
                     result = await coordinator.process_question(
                         question,
                         progress_callback,
@@ -565,6 +637,18 @@ class ParallelExcelProcessor:
                             
                             failed_count += 1
                 
+                except asyncio.CancelledError:
+                    # Task was cancelled - reset cell to pending
+                    logger.info(f"Agent Set {agent_set_id} question at row {row_idx + 1} cancelled")
+                    async with self._state_lock:
+                        sheet_data.cell_states[row_idx] = CellState.PENDING
+                        sheet_data.answers[row_idx] = None
+                        self._emit_event('CELL_CANCELLED', {
+                            'sheet_index': sheet_idx,
+                            'row_index': row_idx
+                        })
+                    break  # Exit worker loop
+                
                 except Exception as e:
                     # Exception during processing
                     async with self._state_lock:
@@ -588,9 +672,42 @@ class ParallelExcelProcessor:
         return processed_count, failed_count
     
     def cancel_processing(self) -> None:
-        """Cancel the current processing operation."""
+        """Cancel the current processing operation immediately."""
         self.cancelled = True
         logger.info("Parallel Excel processing cancellation requested")
+        
+        # Cancel all worker tasks
+        for task in self.worker_tasks:
+            if not task.done():
+                logger.info(f"Cancelling worker task: {task}")
+                task.cancel()
+        
+        # Clean up any working cells
+        if self.current_workbook:
+            self._cleanup_working_cells(self.current_workbook)
+    
+    def _cleanup_working_cells(self, workbook_data: WorkbookData) -> None:
+        """Reset all working cells back to pending state.
+        
+        Args:
+            workbook_data: Workbook to clean up
+        """
+        logger.info("Cleaning up working cells after cancellation in parallel processor")
+        
+        for sheet_idx, sheet_data in enumerate(workbook_data.sheets):
+            for row_idx, state in enumerate(sheet_data.cell_states):
+                if state == CellState.WORKING:
+                    # Reset to pending
+                    sheet_data.cell_states[row_idx] = CellState.PENDING
+                    sheet_data.answers[row_idx] = None
+                    
+                    # Emit event to update UI
+                    self._emit_event('CELL_RESET', {
+                        'sheet_index': sheet_idx,
+                        'row_index': row_idx
+                    })
+                    
+                    logger.debug(f"Reset cell [{sheet_idx}][{row_idx}] from WORKING to PENDING")
     
     def _emit_event(self, event_type: str, payload: Dict[str, Any]) -> None:
         """Emit UI update event to queue.

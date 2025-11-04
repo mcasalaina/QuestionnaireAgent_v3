@@ -89,12 +89,15 @@ class UIManager:
         self.answer_display: Optional[scrolledtext.ScrolledText] = None
         self.sources_display: Optional[scrolledtext.ScrolledText] = None
         self.reasoning_display: Optional[scrolledtext.ScrolledText] = None
+        self.char_limit_entry: Optional[ttk.Entry] = None
+        self.max_retries_entry: Optional[ttk.Entry] = None
         
         # Excel processing components
         self.workbook_view: Optional[WorkbookView] = None
         self.ui_update_queue: Optional[UIUpdateQueue] = None
         self.current_workbook_data: Optional[WorkbookData] = None
         self._temp_workbook_data: Optional[WorkbookData] = None
+        self.current_excel_processor: Optional[Any] = None  # Store current processor for cancellation
         
         # Settings
         self.char_limit_var = tk.IntVar(value=initial_char_limit if initial_char_limit is not None else 2000)
@@ -184,23 +187,23 @@ class UIManager:
         limit_label = ttk.Label(parent, text="Character Limit")
         limit_label.pack(anchor=tk.W, pady=(0, 5))
         
-        char_limit_entry = ttk.Entry(
+        self.char_limit_entry = ttk.Entry(
             parent,
             textvariable=self.char_limit_var,
             width=40
         )
-        char_limit_entry.pack(fill=tk.X, pady=(0, 15))
+        self.char_limit_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Maximum Retries section
         retries_label = ttk.Label(parent, text="Maximum Retries")
         retries_label.pack(anchor=tk.W, pady=(0, 5))
         
-        retries_entry = ttk.Entry(
+        self.max_retries_entry = ttk.Entry(
             parent,
             textvariable=self.max_retries_var,
             width=40
         )
-        retries_entry.pack(fill=tk.X, pady=(0, 15))
+        self.max_retries_entry.pack(fill=tk.X, pady=(0, 15))
         
         # Question section
         question_label = ttk.Label(parent, text="Question")
@@ -252,12 +255,12 @@ class UIManager:
         )
         self.answer_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Documentation tab
-        docs_frame = ttk.Frame(self.results_notebook)
-        self.results_notebook.add(docs_frame, text="Documentation")
+        # Documentation tab (store reference to the frame)
+        self.docs_frame = ttk.Frame(self.results_notebook)
+        self.results_notebook.add(self.docs_frame, text="Documentation")
         
         self.sources_display = scrolledtext.ScrolledText(
-            docs_frame,
+            self.docs_frame,
             wrap=tk.WORD,
             font=("Segoe UI", 12),
             state=tk.DISABLED
@@ -347,7 +350,7 @@ class UIManager:
                 self._load_and_display_excel_sync(file_path)
                 
                 # Then start async processing in background
-                self._set_processing_state(True)
+                self._set_processing_state(True, is_spreadsheet=True)
                 self._start_async_excel_processing(file_path)
                 
             except Exception as e:
@@ -550,6 +553,9 @@ class UIManager:
                 self._display_agent_conversation,
                 self.update_progress
             )
+            # Store processor reference for cancellation
+            self.current_excel_processor = processor
+            
             result = await processor.process_workbook(
                 workbook_data,
                 self.context_var.get(),
@@ -557,8 +563,11 @@ class UIManager:
                 self.max_retries_var.get()
             )
             
-            # Save workbook if successful
-            if result.success:
+            # Check if processing was cancelled
+            was_cancelled = processor.cancelled
+            
+            # Save workbook if successful AND not cancelled
+            if result.success and not was_cancelled:
                 self.update_reasoning("Processing complete - prompting for save location...")
                 
                 # Generate default filename suggestion
@@ -596,65 +605,30 @@ class UIManager:
                 
                 output_path = self._save_dialog_result
                 
-                # If user cancelled the dialog, give them a chance to save
-                while not output_path:
-                    self.update_reasoning("Save cancelled - prompting user...")
+                # If user cancelled the dialog, just return success without saving
+                if not output_path:
+                    self.update_reasoning("Save cancelled - results are ready to view in the spreadsheet")
+                    logger.info("User cancelled save dialog - no file saved")
+                else:
+                    # User selected a save location - save the file
+                    self.update_reasoning(f"Saving results to: {output_path}")
+                    # Use same Azure client as the agent coordinator for consistency
+                    azure_client = None
+                    if self.agent_coordinator and hasattr(self.agent_coordinator, 'azure_client'):
+                        azure_client = self.agent_coordinator.azure_client
                     
-                    # Show warning on main thread
-                    retry_save = None
-                    def show_cancel_warning():
-                        nonlocal retry_save
-                        retry_save = messagebox.askyesno(
-                            "Save Required",
-                            "The questionnaire processing is complete.\n\n"
-                            "Please choose a location to save the results.\n\n"
-                            "Would you like to choose a save location now?",
-                            icon='warning'
-                        )
-                        self._save_dialog_completed = True
+                    column_identifier = ColumnIdentifier(azure_client=azure_client)
+                    loader = ExcelLoader(column_identifier=column_identifier)
+                    saved_path = loader.save_workbook(workbook_data, output_path)
                     
-                    self._save_dialog_completed = False
-                    self.root.after(0, show_cancel_warning)
-                    
-                    # Wait for response
-                    while not self._save_dialog_completed:
-                        await asyncio.sleep(0.1)
-                    
-                    if not retry_save:
-                        # User really doesn't want to save - treat as cancellation
-                        self.update_reasoning("Save cancelled by user")
-                        return ExcelProcessingResult(
-                            success=False,
-                            error_message="Save cancelled by user",
-                            questions_processed=result.questions_processed,
-                            questions_failed=result.questions_failed,
-                            processing_time=result.processing_time
-                        )
-                    
-                    # Show save dialog again
-                    self._save_dialog_completed = False
-                    self.root.after(0, show_save_dialog)
-                    
-                    while not self._save_dialog_completed:
-                        await asyncio.sleep(0.1)
-                    
-                    output_path = self._save_dialog_result
-                
-                self.update_reasoning(f"Saving results to: {output_path}")
-                # Use same Azure client as the agent coordinator for consistency
-                azure_client = None
-                if self.agent_coordinator and hasattr(self.agent_coordinator, 'azure_client'):
-                    azure_client = self.agent_coordinator.azure_client
-                
-                column_identifier = ColumnIdentifier(azure_client=azure_client)
-                loader = ExcelLoader(column_identifier=column_identifier)
-                saved_path = loader.save_workbook(workbook_data, output_path)
-                
-                # Update result with actual output path
-                result.output_file_path = saved_path
+                    # Update result with actual output path
+                    result.output_file_path = saved_path
                 
                 self.update_reasoning(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
                 logger.info(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
+            elif was_cancelled:
+                self.update_reasoning(f"Processing cancelled by user: {result.questions_processed} completed, {result.questions_failed} failed")
+                logger.info(f"Excel processing cancelled by user: {result.questions_processed} processed, {result.questions_failed} failed")
             else:
                 self.update_reasoning(f"Excel processing failed: {result.error_message}")
             
@@ -686,6 +660,9 @@ class UIManager:
                 questions_processed=0,
                 questions_failed=0
             )
+        finally:
+            # Clear the processor reference
+            self.current_excel_processor = None
     
     def _handle_question_result(self, result: ProcessingResult) -> None:
         """Handle question processing result on main thread."""
@@ -833,23 +810,21 @@ class UIManager:
         """Handle Excel processing result on main thread."""
         try:
             if result.success:
-                # Display simplified Excel results summary (user already chose save location)
-                summary = f"Excel processing completed successfully!\n\n"
-                summary += f"Questions processed: {result.questions_processed}\n"
-                summary += f"Questions failed: {result.questions_failed}\n"
-                summary += f"Processing time: {result.processing_time:.1f} seconds"
-                
-                # Show completion message but keep workbook view visible
-                messagebox.showinfo("Excel Processing Complete", summary)
-                self.status_manager.set_status("Excel processing completed", "success")
+                # Keep workbook view visible without showing dialog
+                if self.processing_active:
+                    self.status_manager.set_status("Excel processing completed", "success")
             else:
                 # Show error and restore answer display
                 self._restore_answer_display()
                 self.display_error("excel_format", result.error_message or "Excel processing failed")
-                self.status_manager.set_status("Excel processing failed", "error")
+                if self.processing_active:
+                    self.status_manager.set_status("Excel processing failed", "error")
         
         finally:
-            self._set_processing_state(False)
+            # Only restore UI state if still marked as processing
+            # (may have been already restored by Stop button)
+            if self.processing_active:
+                self._set_processing_state(False)
     
     def _handle_processing_error(self, error: Exception) -> None:
         """Handle processing error on main thread."""
@@ -868,7 +843,9 @@ class UIManager:
                 self.display_error("general", f"An unexpected error occurred: {str(error)}")
         
         finally:
-            self._set_processing_state(False)
+            # Only restore UI state if still marked as processing
+            if self.processing_active:
+                self._set_processing_state(False)
     
     def process_single_question(
         self, 
@@ -1068,14 +1045,55 @@ class UIManager:
         except Exception as e:
             logger.error(f"Error clearing reasoning display: {e}")
     
-    def _set_processing_state(self, processing: bool) -> None:
-        """Enable/disable UI elements during processing."""
+    def _set_processing_state(self, processing: bool, is_spreadsheet: bool = False) -> None:
+        """Enable/disable UI elements during processing.
+        
+        Args:
+            processing: Whether processing is active
+            is_spreadsheet: Whether this is spreadsheet processing (vs single question)
+        """
         self.processing_active = processing
         
-        # Update button states
-        state = tk.DISABLED if processing else tk.NORMAL
-        self.ask_button.config(state=state)
-        self.import_button.config(state=state)
+        if processing and is_spreadsheet:
+            # Spreadsheet mode: special UI state
+            # Clear and disable question entry
+            self.question_entry.delete("1.0", tk.END)
+            self.question_entry.config(state=tk.DISABLED, bg="#f0f0f0")
+            
+            # Disable character limit and max retries (keep values visible)
+            self.char_limit_entry.config(state=tk.DISABLED)
+            self.max_retries_entry.config(state=tk.DISABLED)
+            
+            # Hide Documentation tab
+            self._hide_documentation_tab()
+            
+            # Change Ask button to Stop button
+            self.ask_button.config(text="Stop", command=self._on_stop_clicked, state=tk.NORMAL)
+            
+            # Disable Import button
+            self.import_button.config(state=tk.DISABLED)
+        elif processing:
+            # Single question mode: disable all buttons
+            state = tk.DISABLED
+            self.ask_button.config(state=state)
+            self.import_button.config(state=state)
+        else:
+            # Not processing: restore normal state
+            # Re-enable question entry
+            self.question_entry.config(state=tk.NORMAL, bg="white")
+            
+            # Re-enable character limit and max retries
+            self.char_limit_entry.config(state=tk.NORMAL)
+            self.max_retries_entry.config(state=tk.NORMAL)
+            
+            # Show Documentation tab
+            self._show_documentation_tab()
+            
+            # Restore Ask button
+            self.ask_button.config(text="Ask!", command=self._on_ask_clicked, state=tk.NORMAL)
+            
+            # Re-enable Import button
+            self.import_button.config(state=tk.NORMAL)
         
         # Update status
         if processing:
@@ -1083,6 +1101,79 @@ class UIManager:
             self.status_manager.show_progress()
         else:
             self.status_manager.hide_progress()
+    
+    def _hide_documentation_tab(self) -> None:
+        """Hide the Documentation tab during spreadsheet processing."""
+        try:
+            # Find the Documentation tab index
+            for i in range(self.results_notebook.index("end")):
+                if self.results_notebook.tab(i, "text") == "Documentation":
+                    self.results_notebook.hide(i)
+                    break
+        except Exception as e:
+            logger.error(f"Error hiding Documentation tab: {e}")
+    
+    def _show_documentation_tab(self) -> None:
+        """Show the Documentation tab after spreadsheet processing."""
+        try:
+            # Find the Documentation tab index
+            for i in range(self.results_notebook.index("end")):
+                if self.results_notebook.tab(i, "text") == "Documentation":
+                    self.results_notebook.add(self.docs_frame, text="Documentation")
+                    break
+        except Exception as e:
+            logger.error(f"Error showing Documentation tab: {e}")
+    
+    def _on_stop_clicked(self) -> None:
+        """Handle Stop button click during spreadsheet processing."""
+        if not self.processing_active:
+            return
+        
+        # Cancel the current processing
+        if self.current_excel_processor:
+            logger.info("Stop button clicked - cancelling Excel processing")
+            self.update_reasoning("Stop requested - cancelling spreadsheet processing...")
+            self.current_excel_processor.cancel_processing()
+            
+            # Process any pending UI events (e.g., CELL_RESET for working cells)
+            if self.workbook_view:
+                self._drain_ui_events()
+            
+            # Immediately restore UI state
+            self._set_processing_state(False)
+            self.status_manager.set_status("Processing cancelled", "info")
+    
+    def _drain_ui_events(self) -> None:
+        """Drain all pending UI events from the queue without waiting for polling.
+        
+        This ensures that CELL_RESET events emitted during cancellation are
+        processed immediately, so working cells are cleared before the UI is restored.
+        """
+        if not self.workbook_view or not self.workbook_view.ui_update_queue:
+            return
+        
+        try:
+            import queue
+            max_events = 100  # Prevent infinite loops
+            events_processed = 0
+            
+            while events_processed < max_events:
+                try:
+                    event = self.workbook_view.ui_update_queue.get_nowait()
+                    self.workbook_view._process_event(event)
+                    events_processed += 1
+                except queue.Empty:
+                    # Queue is empty
+                    break
+                except Exception as e:
+                    logger.error(f"Error processing drained UI event: {e}")
+                    break
+            
+            if events_processed > 0:
+                logger.debug(f"Drained and processed {events_processed} pending UI events")
+        
+        except Exception as e:
+            logger.error(f"Error draining UI events: {e}")
     
     def _clear_results(self) -> None:
         """Clear all result displays."""
@@ -1302,7 +1393,7 @@ class UIManager:
             self._load_and_display_excel_sync(file_path)
             
             # Then start async processing in background
-            self._set_processing_state(True)
+            self._set_processing_state(True, is_spreadsheet=True)
             self._start_async_excel_processing(file_path)
             
         except Exception as e:

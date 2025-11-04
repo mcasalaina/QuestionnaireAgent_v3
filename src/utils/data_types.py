@@ -469,6 +469,7 @@ class UIUpdateEvent:
         """Validate event data."""
         valid_types = {
             'SHEET_START', 'CELL_WORKING', 'CELL_COMPLETED', 
+            'CELL_RESET', 'CELL_CANCELLED',
             'SHEET_COMPLETE', 'WORKBOOK_COMPLETE', 'ERROR'
         }
         if self.event_type not in valid_types:
