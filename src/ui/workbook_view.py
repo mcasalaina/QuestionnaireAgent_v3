@@ -379,7 +379,7 @@ class WorkbookView:
         answer = payload.get('answer', '')
         
         if 0 <= sheet_idx < len(self.sheet_views):
-            self.sheet_views[sheet_idx].update_cell(row_idx, CellState.COMPLETED, answer)
+            self.sheet_views[sheet_idx].update_cell(row_idx, CellState.COMPLETED, answer=answer)
     
     def _handle_sheet_complete(self, payload: dict) -> None:
         """Handle SHEET_COMPLETE event."""

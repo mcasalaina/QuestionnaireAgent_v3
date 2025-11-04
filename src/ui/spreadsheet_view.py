@@ -152,7 +152,7 @@ class SpreadsheetView:
             state = self.sheet_data.cell_states[row_idx]
             answer = self.sheet_data.answers[row_idx]
             
-            response_text = self._get_response_text(state, answer or "", None)
+            response_text = self._get_response_text(state, answer or "", agent_name=None)
             
             # Use alternating row colors with state-specific variants
             is_odd = (row_idx % 2) == 1
