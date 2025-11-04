@@ -3,7 +3,7 @@
 import tkinter as tk
 from tkinter import ttk
 import queue
-from typing import Optional, List
+from typing import Optional, List, Callable
 from utils.data_types import WorkbookData, NavigationState, UIUpdateEvent, CellState
 from utils.ui_queue import UIUpdateQueue
 from .spreadsheet_view import SpreadsheetView
@@ -24,7 +24,7 @@ class WorkbookView:
         parent: tk.Widget,
         workbook_data: WorkbookData,
         ui_update_queue: UIUpdateQueue,
-        cell_completed_callback = None
+        cell_completed_callback: Optional[Callable[[int], None]] = None
     ):
         """Initialize workbook view.
         

@@ -954,7 +954,7 @@ class UIManager:
         self.error_dialog.show_error(error_type, message, details)
     
     def update_progress(self, agent: str, message: str, progress: float,
-                       sheet_name: str = None, cell_index: int = None) -> None:
+                       sheet_name: Optional[str] = None, cell_index: Optional[int] = None) -> None:
         """Update UI with current processing progress.
         
         Args:

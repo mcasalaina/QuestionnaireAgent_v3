@@ -84,7 +84,7 @@ class StatusManager:
         logger.debug(f"Status set: {message} ({status_type})")
     
     def update_progress(self, agent: str, message: str, progress: float, 
-                       sheet_name: str = None, cell_index: int = None) -> None:
+                       sheet_name: Optional[str] = None, cell_index: Optional[int] = None) -> None:
         """Update progress tracking with agent activity.
         
         Args:
