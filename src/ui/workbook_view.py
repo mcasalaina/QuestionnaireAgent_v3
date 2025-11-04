@@ -367,9 +367,10 @@ class WorkbookView:
         """Handle CELL_WORKING event."""
         sheet_idx = payload.get('sheet_index', 0)
         row_idx = payload.get('row_index', 0)
+        agent_name = payload.get('agent_name', None)
         
         if 0 <= sheet_idx < len(self.sheet_views):
-            self.sheet_views[sheet_idx].update_cell(row_idx, CellState.WORKING)
+            self.sheet_views[sheet_idx].update_cell(row_idx, CellState.WORKING, agent_name=agent_name)
     
     def _handle_cell_completed(self, payload: dict) -> None:
         """Handle CELL_COMPLETED event."""

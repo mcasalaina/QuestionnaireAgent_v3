@@ -109,6 +109,12 @@ class ExcelProcessor:
                         def local_progress_callback(agent, msg, progress):
                             progress_msg = f"Agent progress - {agent}: {msg} ({progress:.1%})"
                             logger.info(f"📊 {progress_msg}")
+                            # Emit CELL_WORKING event with agent information
+                            self._emit_event('CELL_WORKING', {
+                                'sheet_index': sheet_idx,
+                                'row_index': row_idx,
+                                'agent_name': agent
+                            })
                             # Update UI progress bar if callback provided
                             if self.progress_callback:
                                 self.progress_callback(agent, msg, progress)

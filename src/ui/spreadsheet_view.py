@@ -152,7 +152,7 @@ class SpreadsheetView:
             state = self.sheet_data.cell_states[row_idx]
             answer = self.sheet_data.answers[row_idx]
             
-            response_text = self._get_response_text(state, answer or "")
+            response_text = self._get_response_text(state, answer or "", None)
             
             # Use alternating row colors with state-specific variants
             is_odd = (row_idx % 2) == 1
@@ -178,7 +178,8 @@ class SpreadsheetView:
         self, 
         row_index: int, 
         state: CellState, 
-        answer: Optional[str] = None
+        answer: Optional[str] = None,
+        agent_name: Optional[str] = None
     ) -> None:
         """Update visual state of a single cell.
         
@@ -186,6 +187,7 @@ class SpreadsheetView:
             row_index: Zero-based row index
             state: New cell state
             answer: Answer text (required for COMPLETED state)
+            agent_name: Name of the currently active agent (for WORKING state)
         """
         if row_index < 0 or row_index >= len(self.row_ids):
             logger.warning(f"Invalid row_index: {row_index} (valid range: 0-{len(self.row_ids)-1})")
@@ -197,7 +199,7 @@ class SpreadsheetView:
         
         row_id = self.row_ids[row_index]
         question = self.sheet_data.questions[row_index]
-        response_text = self._get_response_text(state, answer or "")
+        response_text = self._get_response_text(state, answer or "", agent_name)
         
         # Use alternating row colors with state-specific variants
         is_odd = (row_index % 2) == 1
@@ -227,18 +229,27 @@ class SpreadsheetView:
         
         logger.debug(f"Updated cell [{row_index}] to {state.value} with alternating color")
     
-    def _get_response_text(self, state: CellState, answer: str) -> str:
+    def _get_response_text(self, state: CellState, answer: str, agent_name: Optional[str] = None) -> str:
         """Get display text for response cell based on state.
         
         Args:
             state: Current cell state
             answer: Answer text
+            agent_name: Name of the currently active agent (for WORKING state)
             
         Returns:
             Text to display in response column
         """
         if state == CellState.WORKING:
-            return "Working..."
+            # Map agent names to user-friendly messages in bold
+            if agent_name == "question_answerer":
+                return "Composing Answer..."
+            elif agent_name == "answer_checker":
+                return "Checking Answer..."
+            elif agent_name == "link_checker":
+                return "Checking Links..."
+            else:
+                return "Working..."
         elif state == CellState.COMPLETED:
             return answer or ""
         else:  # PENDING
