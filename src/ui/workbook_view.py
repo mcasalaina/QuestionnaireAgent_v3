@@ -333,6 +333,12 @@ class WorkbookView:
             elif event_type == 'CELL_COMPLETED':
                 self._handle_cell_completed(payload)
             
+            elif event_type == 'CELL_RESET':
+                self._handle_cell_reset(payload)
+            
+            elif event_type == 'CELL_CANCELLED':
+                self._handle_cell_cancelled(payload)
+            
             elif event_type == 'SHEET_COMPLETE':
                 self._handle_sheet_complete(payload)
             
@@ -379,6 +385,19 @@ class WorkbookView:
         
         if 0 <= sheet_idx < len(self.sheet_views):
             self.sheet_views[sheet_idx].update_cell(row_idx, CellState.COMPLETED, answer)
+    
+    def _handle_cell_reset(self, payload: dict) -> None:
+        """Handle CELL_RESET event - reset cell to pending state."""
+        sheet_idx = payload.get('sheet_index', 0)
+        row_idx = payload.get('row_index', 0)
+        
+        if 0 <= sheet_idx < len(self.sheet_views):
+            self.sheet_views[sheet_idx].update_cell(row_idx, CellState.PENDING)
+            logger.debug(f"Reset cell [{sheet_idx}][{row_idx}] to PENDING")
+    
+    def _handle_cell_cancelled(self, payload: dict) -> None:
+        """Handle CELL_CANCELLED event - same as reset."""
+        self._handle_cell_reset(payload)
     
     def _handle_sheet_complete(self, payload: dict) -> None:
         """Handle SHEET_COMPLETE event."""
