@@ -1,5 +1,5 @@
 # Microsoft Agent Framework (required --pre flag during installation)
-agent-framework-azure-ai
+agent-framework-azure-ai>=1.0.0b251028
 
 # Azure AI services and authentication
 azure-ai-projects

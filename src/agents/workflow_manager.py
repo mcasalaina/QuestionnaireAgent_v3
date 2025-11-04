@@ -140,8 +140,45 @@ class AgentCoordinator:
                     if reasoning_callback:
                         reasoning_callback(verbose_msg)
                     
-                    logger.info(f"🎯 Calling workflow.run() with question: '{question.text}'")
-                    events = await self.workflow.run(question)
+                    logger.info(f"🎯 Calling workflow.run_stream() with question: '{question.text}'")
+                    event_stream = self.workflow.run_stream(question)
+                    
+                    # Process streaming events to track agent execution
+                    from agent_framework import (
+                        ExecutorInvokedEvent, ExecutorCompletedEvent,
+                        AgentRunUpdateEvent, WorkflowOutputEvent
+                    )
+                    
+                    outputs = []
+                    current_agent = None
+                    
+                    async for event in event_stream:
+                        # Debug log every event
+                        logger.debug(f"📨 Workflow event received: {type(event).__name__}")
+                        
+                        # Track when an executor STARTS processing
+                        if isinstance(event, ExecutorInvokedEvent):
+                            agent_id = event.executor_id
+                            logger.info(f"🎯 Executor STARTED: executor_id='{agent_id}'")
+                            
+                            if agent_id != current_agent:
+                                current_agent = agent_id
+                                # Notify UI about agent change
+                                verbose_msg = f"Agent '{agent_id}' is now processing..."
+                                logger.info(f"🤖 {verbose_msg}")
+                                if reasoning_callback:
+                                    reasoning_callback(verbose_msg)
+                                # Call progress callback with current agent name
+                                logger.info(f"📞 Calling progress_callback with agent_name='{agent_id}'")
+                                progress_callback(agent_id, "Processing...", 0.5)
+                        
+                        # Track when an executor COMPLETES
+                        elif isinstance(event, ExecutorCompletedEvent):
+                            logger.info(f"✅ Executor COMPLETED: executor_id='{event.executor_id}'")
+                        
+                        # Check if this is the final output event
+                        if isinstance(event, WorkflowOutputEvent):
+                            outputs.append(event.data)
                     
                     # Add verbose logging for workflow result
                     verbose_msg = f"✅ Workflow execution completed, checking outputs..."
@@ -150,7 +187,6 @@ class AgentCoordinator:
                         reasoning_callback(verbose_msg)
                     
                     # Get the final result
-                    outputs = events.get_outputs()
                     if not outputs:
                         verbose_msg = "ERROR: No output received from workflow - agents may not be communicating properly"
                         logger.error(verbose_msg)
@@ -158,7 +194,7 @@ class AgentCoordinator:
                             reasoning_callback(verbose_msg)
                         raise AgentExecutionError("No output received from workflow")
                     
-                    workflow_result = outputs[0]
+                    workflow_result = outputs[0] if outputs else {}
                     
                     # Check if processing was successful
                     if workflow_result.get("processing_complete", False):
