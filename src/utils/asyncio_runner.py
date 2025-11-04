@@ -115,6 +115,10 @@ class AsyncioThreadRunner:
                 result = await coro
                 if callback:
                     callback(result)
+            except asyncio.CancelledError:
+                # Task was cancelled during shutdown - this is expected behavior
+                logger.debug("Coroutine cancelled during shutdown")
+                raise  # Re-raise to properly propagate cancellation
             except Exception as e:
                 logger.error(f"Error running coroutine: {e}", exc_info=True)
                 if error_callback:
