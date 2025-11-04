@@ -810,14 +810,7 @@ class UIManager:
         """Handle Excel processing result on main thread."""
         try:
             if result.success:
-                # Display simplified Excel results summary (user already chose save location)
-                summary = f"Excel processing completed successfully!\n\n"
-                summary += f"Questions processed: {result.questions_processed}\n"
-                summary += f"Questions failed: {result.questions_failed}\n"
-                summary += f"Processing time: {result.processing_time:.1f} seconds"
-                
-                # Show completion message but keep workbook view visible
-                messagebox.showinfo("Excel Processing Complete", summary)
+                # Keep workbook view visible without showing dialog
                 if self.processing_active:
                     self.status_manager.set_status("Excel processing completed", "success")
             else:
