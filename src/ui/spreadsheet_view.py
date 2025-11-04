@@ -5,6 +5,7 @@ from tkinter import ttk
 from typing import Optional
 from utils.data_types import SheetData, CellState
 import logging
+import textwrap
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,11 @@ class SpreadsheetView:
     COLOR_PENDING = "#FFFFFF"      # White
     COLOR_WORKING = "#FFB6C1"      # Pink
     COLOR_COMPLETED = "#90EE90"    # Light green
+    
+    # Text wrapping configuration
+    MAX_LINES_PER_CELL = 5         # Maximum lines before truncation
+    CHARS_PER_LINE_RESPONSE = 80   # Approximate characters per line for response column
+    CHARS_PER_LINE_QUESTION = 50   # Approximate characters per line for question column
     
     def __init__(self, parent: tk.Widget, sheet_data: SheetData):
         """Initialize spreadsheet view.
@@ -56,9 +62,10 @@ class SpreadsheetView:
         self.treeview.column('question', width=400, minwidth=200, anchor='w')
         self.treeview.column('response', width=600, minwidth=300, anchor='w')
         
-        # Configure row height to accommodate multi-line text better
+        # Configure row height to accommodate up to 5 lines of text
+        # Each line needs ~20 pixels, so 5 lines = 100 pixels + padding
         style = ttk.Style()
-        style.configure("Treeview", rowheight=60)  # Increase row height from default ~20 to 60
+        style.configure("Treeview", rowheight=110)  # Accommodate up to 5 lines of wrapped text
         
         # Configure borders and styling - use a combination of approaches
         style.configure("Treeview", 
@@ -152,6 +159,12 @@ class SpreadsheetView:
             state = self.sheet_data.cell_states[row_idx]
             answer = self.sheet_data.answers[row_idx]
             
+            # Wrap both question and response text
+            question_text = self._wrap_text(
+                question,
+                self.CHARS_PER_LINE_QUESTION,
+                self.MAX_LINES_PER_CELL
+            )
             response_text = self._get_response_text(state, answer or "")
             
             # Use alternating row colors with state-specific variants
@@ -167,7 +180,7 @@ class SpreadsheetView:
             row_id = self.treeview.insert(
                 '',
                 'end',
-                values=(question, response_text),
+                values=(question_text, response_text),
                 tags=(tag,)
             )
             self.row_ids.append(row_id)
@@ -197,6 +210,13 @@ class SpreadsheetView:
         
         row_id = self.row_ids[row_index]
         question = self.sheet_data.questions[row_index]
+        
+        # Wrap both question and response text
+        question_text = self._wrap_text(
+            question,
+            self.CHARS_PER_LINE_QUESTION,
+            self.MAX_LINES_PER_CELL
+        )
         response_text = self._get_response_text(state, answer or "")
         
         # Use alternating row colors with state-specific variants
@@ -212,7 +232,7 @@ class SpreadsheetView:
         # Update the treeview item
         self.treeview.item(
             row_id,
-            values=(question, response_text),
+            values=(question_text, response_text),
             tags=(tag,)
         )
         
@@ -227,6 +247,41 @@ class SpreadsheetView:
         
         logger.debug(f"Updated cell [{row_index}] to {state.value} with alternating color")
     
+    def _wrap_text(self, text: str, width: int, max_lines: int = None) -> str:
+        """Wrap text to fit within specified character width.
+        
+        Args:
+            text: Text to wrap
+            width: Maximum characters per line
+            max_lines: Maximum number of lines (None for unlimited)
+            
+        Returns:
+            Wrapped text with newlines inserted
+        """
+        if not text:
+            return ""
+        
+        # Use textwrap to break long lines
+        lines = []
+        for paragraph in text.split('\n'):
+            if paragraph:
+                wrapped = textwrap.fill(
+                    paragraph, 
+                    width=width,
+                    break_long_words=False,
+                    break_on_hyphens=False
+                )
+                lines.extend(wrapped.split('\n'))
+            else:
+                lines.append('')
+        
+        # Limit to max_lines if specified
+        if max_lines and len(lines) > max_lines:
+            # Keep first max_lines-1 lines and add ellipsis line
+            lines = lines[:max_lines-1] + [lines[max_lines-1][:width-3] + '...']
+        
+        return '\n'.join(lines)
+    
     def _get_response_text(self, state: CellState, answer: str) -> str:
         """Get display text for response cell based on state.
         
@@ -240,7 +295,13 @@ class SpreadsheetView:
         if state == CellState.WORKING:
             return "Working..."
         elif state == CellState.COMPLETED:
-            return answer or ""
+            # Wrap text to fit column width with max 5 lines
+            wrapped = self._wrap_text(
+                answer or "", 
+                self.CHARS_PER_LINE_RESPONSE,
+                self.MAX_LINES_PER_CELL
+            )
+            return wrapped
         else:  # PENDING
             return ""
     
