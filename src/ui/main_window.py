@@ -563,8 +563,11 @@ class UIManager:
                 self.max_retries_var.get()
             )
             
-            # Save workbook if successful
-            if result.success:
+            # Check if processing was cancelled
+            was_cancelled = processor.cancelled
+            
+            # Save workbook if successful AND not cancelled
+            if result.success and not was_cancelled:
                 self.update_reasoning("Processing complete - prompting for save location...")
                 
                 # Generate default filename suggestion
@@ -602,65 +605,30 @@ class UIManager:
                 
                 output_path = self._save_dialog_result
                 
-                # If user cancelled the dialog, give them a chance to save
-                while not output_path:
-                    self.update_reasoning("Save cancelled - prompting user...")
+                # If user cancelled the dialog, just return success without saving
+                if not output_path:
+                    self.update_reasoning("Save cancelled - results are ready to view in the spreadsheet")
+                    logger.info("User cancelled save dialog - no file saved")
+                else:
+                    # User selected a save location - save the file
+                    self.update_reasoning(f"Saving results to: {output_path}")
+                    # Use same Azure client as the agent coordinator for consistency
+                    azure_client = None
+                    if self.agent_coordinator and hasattr(self.agent_coordinator, 'azure_client'):
+                        azure_client = self.agent_coordinator.azure_client
                     
-                    # Show warning on main thread
-                    retry_save = None
-                    def show_cancel_warning():
-                        nonlocal retry_save
-                        retry_save = messagebox.askyesno(
-                            "Save Required",
-                            "The questionnaire processing is complete.\n\n"
-                            "Please choose a location to save the results.\n\n"
-                            "Would you like to choose a save location now?",
-                            icon='warning'
-                        )
-                        self._save_dialog_completed = True
+                    column_identifier = ColumnIdentifier(azure_client=azure_client)
+                    loader = ExcelLoader(column_identifier=column_identifier)
+                    saved_path = loader.save_workbook(workbook_data, output_path)
                     
-                    self._save_dialog_completed = False
-                    self.root.after(0, show_cancel_warning)
-                    
-                    # Wait for response
-                    while not self._save_dialog_completed:
-                        await asyncio.sleep(0.1)
-                    
-                    if not retry_save:
-                        # User really doesn't want to save - treat as cancellation
-                        self.update_reasoning("Save cancelled by user")
-                        return ExcelProcessingResult(
-                            success=False,
-                            error_message="Save cancelled by user",
-                            questions_processed=result.questions_processed,
-                            questions_failed=result.questions_failed,
-                            processing_time=result.processing_time
-                        )
-                    
-                    # Show save dialog again
-                    self._save_dialog_completed = False
-                    self.root.after(0, show_save_dialog)
-                    
-                    while not self._save_dialog_completed:
-                        await asyncio.sleep(0.1)
-                    
-                    output_path = self._save_dialog_result
-                
-                self.update_reasoning(f"Saving results to: {output_path}")
-                # Use same Azure client as the agent coordinator for consistency
-                azure_client = None
-                if self.agent_coordinator and hasattr(self.agent_coordinator, 'azure_client'):
-                    azure_client = self.agent_coordinator.azure_client
-                
-                column_identifier = ColumnIdentifier(azure_client=azure_client)
-                loader = ExcelLoader(column_identifier=column_identifier)
-                saved_path = loader.save_workbook(workbook_data, output_path)
-                
-                # Update result with actual output path
-                result.output_file_path = saved_path
+                    # Update result with actual output path
+                    result.output_file_path = saved_path
                 
                 self.update_reasoning(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
                 logger.info(f"Excel processing completed successfully: {result.questions_processed} processed, {result.questions_failed} failed")
+            elif was_cancelled:
+                self.update_reasoning(f"Processing cancelled by user: {result.questions_processed} completed, {result.questions_failed} failed")
+                logger.info(f"Excel processing cancelled by user: {result.questions_processed} processed, {result.questions_failed} failed")
             else:
                 self.update_reasoning(f"Excel processing failed: {result.error_message}")
             
@@ -850,15 +818,20 @@ class UIManager:
                 
                 # Show completion message but keep workbook view visible
                 messagebox.showinfo("Excel Processing Complete", summary)
-                self.status_manager.set_status("Excel processing completed", "success")
+                if self.processing_active:
+                    self.status_manager.set_status("Excel processing completed", "success")
             else:
                 # Show error and restore answer display
                 self._restore_answer_display()
                 self.display_error("excel_format", result.error_message or "Excel processing failed")
-                self.status_manager.set_status("Excel processing failed", "error")
+                if self.processing_active:
+                    self.status_manager.set_status("Excel processing failed", "error")
         
         finally:
-            self._set_processing_state(False)
+            # Only restore UI state if still marked as processing
+            # (may have been already restored by Stop button)
+            if self.processing_active:
+                self._set_processing_state(False)
     
     def _handle_processing_error(self, error: Exception) -> None:
         """Handle processing error on main thread."""
@@ -877,7 +850,9 @@ class UIManager:
                 self.display_error("general", f"An unexpected error occurred: {str(error)}")
         
         finally:
-            self._set_processing_state(False)
+            # Only restore UI state if still marked as processing
+            if self.processing_active:
+                self._set_processing_state(False)
     
     def process_single_question(
         self, 
@@ -1167,8 +1142,9 @@ class UIManager:
             self.update_reasoning("Stop requested - cancelling spreadsheet processing...")
             self.current_excel_processor.cancel_processing()
             
-            # UI will be restored when processing completes
-            self.status_manager.set_status("Cancelling processing...", "info")
+            # Immediately restore UI state
+            self._set_processing_state(False)
+            self.status_manager.set_status("Processing cancelled", "info")
     
     def _clear_results(self) -> None:
         """Clear all result displays."""
