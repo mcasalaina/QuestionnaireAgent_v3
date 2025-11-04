@@ -1,4 +1,4 @@
-"""Answer Checker agent executor using Microsoft Agent Framework."""
+"""Answer Checker agent executor using Azure AI Agent Framework."""
 
 import logging
 import time
@@ -35,9 +35,7 @@ class AnswerCheckerExecutor(Executor):
             self.agent = ChatAgent(
                 chat_client=self.azure_client,
                 name="Answer Checker",
-                instructions="""You are an expert Answer Checker specializing in validating technical content about Microsoft Azure AI services.
-
-Your role is to validate the quality, accuracy, and completeness of generated answers. You must evaluate answers against strict quality standards.
+                instructions="""You are an expert Answer Checker who validates the quality, accuracy, and completeness of generated answers. You must evaluate answers against strict quality standards.
 
 VALIDATION CRITERIA:
 1. Accuracy: Is the information factually correct and up-to-date?
@@ -306,7 +304,7 @@ Provide your validation decision:"""
             # Log cleanup for debugging
             logger.info("Cleaning up Answer Checker agent...")
             try:
-                # The Microsoft Agent Framework handles agent lifecycle automatically
+                # The Azure AI Agent Framework handles agent lifecycle automatically
                 # when the underlying AzureAIAgentClient is closed
                 logger.debug("Answer Checker agent cleanup completed")
             except Exception as e:

@@ -1,4 +1,4 @@
-"""Question Answerer agent executor using Microsoft Agent Framework."""
+"""Question Answerer agent executor using Azure AI Agent Framework."""
 
 import logging
 import time
@@ -39,14 +39,12 @@ class QuestionAnswererExecutor(Executor):
                 self.agent = ChatAgent(
                     chat_client=self.azure_client,
                     name="Question Answerer",
-                    instructions="""You are an expert Question Answerer specializing in Microsoft Azure AI services and technologies.
-
-Your role is to provide comprehensive, accurate answers to technical questions about Azure AI. Use web search to find current, authoritative information.
+                    instructions="""You are an expert Question Answerer who provides comprehensive, accurate answers to technical questions. Use web search to find current, authoritative information.
 
 REQUIREMENTS:
 - Provide detailed, technically accurate answers
-- Include relevant documentation URLs from official Microsoft sources when possible
-- Focus on current, up-to-date information about Azure AI services
+- Include relevant documentation URLs from authoritative sources when possible
+- Focus on current, up-to-date information
 - Be comprehensive but stay within character limits
 - Include specific examples and best practices where helpful
 - Always verify information using web search for the latest details
@@ -69,12 +67,12 @@ FORMATTING REQUIREMENTS:
 
 When answering questions:
 1. Search for the most current information
-2. Prioritize official Microsoft documentation
+2. Use authoritative documentation and official sources
 3. Include practical examples where relevant (in plain text)
 4. Provide clear, well-structured explanations in prose format
 5. Include relevant documentation links at the end
 
-Remember to stay focused on Azure AI technologies and provide authoritative, helpful information in plain text format only."""
+Provide authoritative, helpful information in plain text format only."""
                 )
                 
             except Exception as e:
@@ -253,7 +251,7 @@ Question: {question.text}
 
 Requirements:
 - Maximum {question.char_limit} characters in your response
-- Include relevant documentation URLs from official Microsoft sources
+- Include relevant documentation URLs from authoritative sources
 - Provide accurate, up-to-date information
 - Use web search to verify current details
 - Include practical examples where helpful
@@ -349,7 +347,7 @@ Please provide a comprehensive answer in plain text with supporting documentatio
             # Log cleanup for debugging
             logger.info("Cleaning up Question Answerer agent...")
             try:
-                # The Microsoft Agent Framework handles agent lifecycle automatically
+                # The Azure AI Agent Framework handles agent lifecycle automatically
                 # when the underlying AzureAIAgentClient is closed
                 logger.debug("Question Answerer agent cleanup completed")
             except Exception as e:

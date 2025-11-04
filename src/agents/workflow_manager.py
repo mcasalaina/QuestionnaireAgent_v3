@@ -1,4 +1,4 @@
-"""Multi-agent workflow orchestration using Microsoft Agent Framework."""
+"""Multi-agent workflow orchestration using Azure AI Agent Framework."""
 
 import logging
 import time
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class AgentCoordinator:
-    """Orchestrates multi-agent workflow using Microsoft Agent Framework."""
+    """Orchestrates multi-agent workflow using Azure AI Agent Framework."""
     
     def __init__(self, azure_client: AzureAIAgentClient, bing_connection_id: str, 
                  browser_automation_connection_id: str):
