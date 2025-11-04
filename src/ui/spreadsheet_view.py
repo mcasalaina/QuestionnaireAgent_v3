@@ -278,7 +278,9 @@ class SpreadsheetView:
         # Limit to max_lines if specified
         if max_lines and len(lines) > max_lines:
             # Keep first max_lines-1 lines and add ellipsis line
-            lines = lines[:max_lines-1] + [lines[max_lines-1][:width-3] + '...']
+            # Ensure we don't create negative slice indices
+            truncate_pos = max(0, width - 3) if width > 3 else 0
+            lines = lines[:max_lines-1] + [lines[max_lines-1][:truncate_pos] + '...']
         
         return '\n'.join(lines)
     

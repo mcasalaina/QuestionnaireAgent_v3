@@ -118,13 +118,22 @@ class TestSpreadsheetTextWrapping:
         assert spreadsheet_view.CHARS_PER_LINE_RESPONSE == 80
         assert spreadsheet_view.CHARS_PER_LINE_QUESTION == 50
     
+    def test_wrap_text_very_small_width(self, spreadsheet_view):
+        """Test wrapping with very small width doesn't cause errors."""
+        text = "Test text that is longer than expected"
+        # Test with width smaller than 3 (edge case)
+        result = spreadsheet_view._wrap_text(text, 2, 5)
+        # Should handle gracefully without errors
+        assert isinstance(result, str)
+    
     def test_row_height_configured(self, root_window, sample_sheet_data):
         """Test that row height is properly configured for multi-line text."""
         view = SpreadsheetView(root_window, sample_sheet_data)
         treeview = view.render()
         
         # Get the style and check row height
-        style = tk.ttk.Style()
+        from tkinter import ttk
+        style = ttk.Style()
         rowheight = style.lookup("Treeview", "rowheight")
         
         # Should be set to accommodate 5 lines (110 pixels)
