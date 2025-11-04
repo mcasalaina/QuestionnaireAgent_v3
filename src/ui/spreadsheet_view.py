@@ -17,6 +17,13 @@ class SpreadsheetView:
     COLOR_WORKING = "#FFB6C1"      # Pink
     COLOR_COMPLETED = "#90EE90"    # Light green
     
+    # Agent name to user-friendly message mapping
+    AGENT_MESSAGES = {
+        "question_answerer": "Composing Answer...",
+        "answer_checker": "Checking Answer...",
+        "link_checker": "Checking Links..."
+    }
+    
     def __init__(self, parent: tk.Widget, sheet_data: SheetData):
         """Initialize spreadsheet view.
         
@@ -242,14 +249,7 @@ class SpreadsheetView:
         """
         if state == CellState.WORKING:
             # Map agent names to user-friendly messages
-            if agent_name == "question_answerer":
-                return "Composing Answer..."
-            elif agent_name == "answer_checker":
-                return "Checking Answer..."
-            elif agent_name == "link_checker":
-                return "Checking Links..."
-            else:
-                return "Working..."
+            return self.AGENT_MESSAGES.get(agent_name, "Working...")
         elif state == CellState.COMPLETED:
             return answer or ""
         else:  # PENDING
