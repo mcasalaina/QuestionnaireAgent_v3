@@ -89,10 +89,7 @@ class ExcelProcessor:
                         self._cleanup_working_cells(workbook_data)
                         break
                     
-                    # Mark cell as working (event will be emitted by progress callback)
-                    sheet_data.mark_working(row_idx)
-                    
-                    # Create Question object
+                    # Create Question object (progress callback will mark as working with agent name)
                     question = Question(
                         text=question_text,
                         context=context,
@@ -112,12 +109,14 @@ class ExcelProcessor:
                         def local_progress_callback(agent, msg, progress):
                             progress_msg = f"Agent progress - {agent}: {msg} ({progress:.1%})"
                             logger.info(f"📊 {progress_msg}")
+                            logger.debug(f"📞 local_progress_callback received: agent='{agent}', msg='{msg}', progress={progress}")
                             # Emit CELL_WORKING event with agent information
                             self._emit_event('CELL_WORKING', {
                                 'sheet_index': sheet_idx,
                                 'row_index': row_idx,
                                 'agent_name': agent
                             })
+                            logger.debug(f"📤 Emitted CELL_WORKING event with agent_name='{agent}'")
                             # Update UI progress bar if callback provided
                             if self.progress_callback:
                                 self.progress_callback(agent, msg, progress)

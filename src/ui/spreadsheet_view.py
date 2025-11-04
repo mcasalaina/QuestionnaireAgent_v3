@@ -19,9 +19,10 @@ class SpreadsheetView:
     
     # Agent name to user-friendly message mapping
     AGENT_MESSAGES = {
-        "question_answerer": "Composing Answer...",
-        "answer_checker": "Checking Answer...",
-        "link_checker": "Checking Links..."
+        "question_answerer": "𝗔𝗻𝘀𝘄𝗲𝗿𝗶𝗻𝗴...",
+        "answer_checker": "𝗖𝗵𝗲𝗰𝗸𝗶𝗻𝗴 𝗔𝗻𝘀𝘄𝗲𝗿...",
+        "link_checker": "𝗖𝗵𝗲𝗰𝗸𝗶𝗻𝗴 𝗟𝗶𝗻𝗸𝘀...",
+        None: "𝗔𝗻𝘀𝘄𝗲𝗿𝗶𝗻𝗴..."  # Default fallback
     }
     
     def __init__(self, parent: tk.Widget, sheet_data: SheetData):
@@ -136,7 +137,7 @@ class SpreadsheetView:
         self.treeview.tag_configure('completed_odd', background='#90EE90')  # Light green
         self.treeview.tag_configure('completed_even', background='#98FB98')  # Pale green
         
-        # Text color for all states
+        # Text color for all states (default black)
         for tag in ['pending', 'working', 'completed', 'odd_row', 'even_row', 
                    'working_odd', 'working_even', 'completed_odd', 'completed_even']:
             self.treeview.tag_configure(tag, foreground='#000000')
@@ -248,8 +249,10 @@ class SpreadsheetView:
             Text to display in response column
         """
         if state == CellState.WORKING:
-            # Map agent names to user-friendly messages
-            return self.AGENT_MESSAGES.get(agent_name, "Working...")
+            # Map agent names to user-friendly messages with fallback
+            message = self.AGENT_MESSAGES.get(agent_name, self.AGENT_MESSAGES[None])
+            logger.debug(f"Getting response text for agent_name='{agent_name}' -> message='{message}'")
+            return message
         elif state == CellState.COMPLETED:
             return answer or ""
         else:  # PENDING
