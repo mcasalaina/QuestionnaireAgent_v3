@@ -369,7 +369,7 @@ class AgentCoordinator:
         """Clean up Azure AI agent resources and close the Azure client."""
         try:
             # Clean up individual executors (this will reset local agent references)
-            logger.info("Starting agent cleanup - the Microsoft Agent Framework will handle Azure AI Foundry cleanup when the client is closed...")
+            logger.info("Starting agent cleanup - the Azure AI Agent Framework will handle Azure AI Foundry cleanup when the client is closed...")
             
             if self.question_answerer:
                 await self.question_answerer.cleanup()
