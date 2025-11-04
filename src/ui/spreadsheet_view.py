@@ -20,8 +20,10 @@ class SpreadsheetView:
     
     # Text wrapping configuration
     MAX_LINES_PER_CELL = 5         # Maximum lines before truncation
-    CHARS_PER_LINE_RESPONSE = 80   # Approximate characters per line for response column
-    CHARS_PER_LINE_QUESTION = 50   # Approximate characters per line for question column
+    BASE_ROW_HEIGHT = 28           # Base height for single line of text (includes padding)
+    PIXELS_PER_LINE = 18           # Additional pixels needed per line of text
+    AVG_CHAR_WIDTH_PIXELS = 8      # Average character width in pixels for default font
+    COLUMN_PADDING = 20            # Padding within each column (pixels)
     
     # Agent name to user-friendly message mapping
     AGENT_MESSAGES = {
@@ -70,10 +72,10 @@ class SpreadsheetView:
         self.treeview.column('question', width=400, minwidth=200, anchor='w')
         self.treeview.column('response', width=600, minwidth=300, anchor='w')
         
-        # Configure row height to accommodate up to 5 lines of text
-        # Each line needs ~20 pixels, so 5 lines = 100 pixels + padding
+        # Configure initial row height (will be dynamically adjusted based on content)
         style = ttk.Style()
-        style.configure("Treeview", rowheight=110)  # Accommodate up to 5 lines of wrapped text
+        initial_row_height = self._calculate_required_row_height()
+        style.configure("Treeview", rowheight=initial_row_height)
         
         # Configure borders and styling - use a combination of approaches
         style.configure("Treeview", 
@@ -163,6 +165,9 @@ class SpreadsheetView:
         """Populate treeview with all questions from sheet data."""
         self.row_ids.clear()
         
+        # Get dynamic character widths based on actual column sizes
+        question_chars_per_line = self._get_chars_per_line_for_column('question')
+        
         for row_idx, question in enumerate(self.sheet_data.questions):
             state = self.sheet_data.cell_states[row_idx]
             answer = self.sheet_data.answers[row_idx]
@@ -170,7 +175,7 @@ class SpreadsheetView:
             # Wrap both question and response text
             question_text = self._wrap_text(
                 question,
-                self.CHARS_PER_LINE_QUESTION,
+                question_chars_per_line,
                 self.MAX_LINES_PER_CELL
             )
             response_text = self._get_response_text(state, answer or "", agent_name=None)
@@ -221,10 +226,13 @@ class SpreadsheetView:
         row_id = self.row_ids[row_index]
         question = self.sheet_data.questions[row_index]
         
+        # Get dynamic character widths based on actual column sizes
+        question_chars_per_line = self._get_chars_per_line_for_column('question')
+        
         # Wrap both question and response text
         question_text = self._wrap_text(
             question,
-            self.CHARS_PER_LINE_QUESTION,
+            question_chars_per_line,
             self.MAX_LINES_PER_CELL
         )
         response_text = self._get_response_text(state, answer or "", agent_name)
@@ -251,11 +259,119 @@ class SpreadsheetView:
         if answer and state == CellState.COMPLETED:
             self.sheet_data.answers[row_index] = answer
         
+        # Recalculate and update row height if content has changed
+        if state == CellState.COMPLETED and answer:
+            self._update_row_height_if_needed()
+        
         # Auto-scroll to keep active cell visible
         if state == CellState.WORKING:
             self._auto_scroll_to_row(row_index)
         
         logger.debug(f"Updated cell [{row_index}] to {state.value} with alternating color")
+    
+    def _get_chars_per_line_for_column(self, column: str) -> int:
+        """Calculate characters per line based on actual column width.
+        
+        Args:
+            column: Column identifier ('question' or 'response')
+            
+        Returns:
+            Number of characters that can fit per line
+        """
+        if not self.treeview:
+            # Fallback values if treeview not initialized
+            return 45 if column == 'question' else 80
+        
+        # Get actual column width
+        column_width = self.treeview.column(column, 'width')
+        
+        # Calculate usable width (subtract padding)
+        usable_width = column_width - self.COLUMN_PADDING
+        
+        # Calculate characters that fit
+        chars_per_line = max(20, int(usable_width / self.AVG_CHAR_WIDTH_PIXELS))
+        
+        logger.debug(f"Column '{column}' width={column_width}px, usable={usable_width}px, chars_per_line={chars_per_line}")
+        return chars_per_line
+    
+    def _calculate_required_row_height(self) -> int:
+        """Calculate the minimum row height needed to display all content.
+        
+        Returns:
+            Row height in pixels
+        """
+        max_lines = 1
+        
+        # Get dynamic character widths based on actual column sizes
+        question_chars_per_line = self._get_chars_per_line_for_column('question')
+        response_chars_per_line = self._get_chars_per_line_for_column('response')
+        
+        # Check all questions and current answers for maximum line count
+        for row_idx, question in enumerate(self.sheet_data.questions):
+            state = self.sheet_data.cell_states[row_idx]
+            answer = self.sheet_data.answers[row_idx]
+            
+            # Calculate lines for question
+            question_lines = self._count_wrapped_lines(
+                question,
+                question_chars_per_line,
+                self.MAX_LINES_PER_CELL
+            )
+            max_lines = max(max_lines, question_lines)
+            
+            # Calculate lines for response (if completed)
+            if state == CellState.COMPLETED and answer:
+                response_lines = self._count_wrapped_lines(
+                    answer,
+                    response_chars_per_line,
+                    self.MAX_LINES_PER_CELL
+                )
+                max_lines = max(max_lines, response_lines)
+        
+        # Calculate row height: base height + additional height per line
+        # For single line, use base height; for multiple lines, add height per extra line
+        if max_lines == 1:
+            row_height = self.BASE_ROW_HEIGHT
+        else:
+            row_height = self.BASE_ROW_HEIGHT + (max_lines - 1) * self.PIXELS_PER_LINE
+        
+        logger.debug(f"Calculated row height: {row_height}px for max {max_lines} lines")
+        return row_height
+    
+    def _count_wrapped_lines(self, text: str, width: int, max_lines: int = None) -> int:
+        """Count the number of lines the text will occupy when wrapped.
+        
+        Args:
+            text: Text to count lines for
+            width: Maximum characters per line
+            max_lines: Maximum number of lines (None for unlimited)
+            
+        Returns:
+            Number of lines needed
+        """
+        if not text:
+            return 1
+        
+        # Use textwrap to break long lines
+        lines = []
+        for paragraph in text.split('\n'):
+            if paragraph:
+                wrapped = textwrap.fill(
+                    paragraph, 
+                    width=width,
+                    break_long_words=False,
+                    break_on_hyphens=False
+                )
+                lines.extend(wrapped.split('\n'))
+            else:
+                lines.append('')
+        
+        # Apply max_lines limit
+        line_count = len(lines)
+        if max_lines:
+            line_count = min(line_count, max_lines)
+        
+        return max(1, line_count)
     
     def _wrap_text(self, text: str, width: int, max_lines: int = None) -> str:
         """Wrap text to fit within specified character width.
@@ -298,6 +414,23 @@ class SpreadsheetView:
         
         return '\n'.join(lines)
     
+    def _update_row_height_if_needed(self) -> None:
+        """Recalculate and update row height if content requires it."""
+        if not self.treeview:
+            return
+        
+        # Calculate the required row height based on current content
+        new_height = self._calculate_required_row_height()
+        
+        # Get current row height
+        style = ttk.Style()
+        current_height = style.lookup("Treeview", "rowheight")
+        
+        # Only update if new height is different
+        if current_height != new_height:
+            style.configure("Treeview", rowheight=new_height)
+            logger.debug(f"Updated row height from {current_height}px to {new_height}px")
+    
     def _get_response_text(self, state: CellState, answer: str, agent_name: Optional[str] = None) -> str:
         """Get display text for response cell based on state.
         
@@ -315,10 +448,12 @@ class SpreadsheetView:
             logger.debug(f"Getting response text for agent_name='{agent_name}' -> message='{message}'")
             return message
         elif state == CellState.COMPLETED:
+            # Get dynamic character width for response column
+            response_chars_per_line = self._get_chars_per_line_for_column('response')
             # Wrap text to fit column width with max 5 lines
             wrapped = self._wrap_text(
                 answer or "", 
-                self.CHARS_PER_LINE_RESPONSE,
+                response_chars_per_line,
                 self.MAX_LINES_PER_CELL
             )
             return wrapped
