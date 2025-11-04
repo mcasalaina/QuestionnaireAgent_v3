@@ -23,7 +23,8 @@ class WorkbookView:
         self,
         parent: tk.Widget,
         workbook_data: WorkbookData,
-        ui_update_queue: UIUpdateQueue
+        ui_update_queue: UIUpdateQueue,
+        cell_completed_callback = None
     ):
         """Initialize workbook view.
         
@@ -31,11 +32,13 @@ class WorkbookView:
             parent: Parent tkinter widget
             workbook_data: Complete workbook data
             ui_update_queue: Queue for receiving UI updates
+            cell_completed_callback: Optional callback(cell_index) when a cell completes
         """
         self.parent = parent
         self.workbook_data = workbook_data
         self.ui_update_queue = ui_update_queue
         self.navigation_state = NavigationState()
+        self.cell_completed_callback = cell_completed_callback
         
         self.sheet_views: List[SpreadsheetView] = []
         self.sheet_frames: List[ttk.Frame] = []
@@ -387,6 +390,10 @@ class WorkbookView:
         
         if 0 <= sheet_idx < len(self.sheet_views):
             self.sheet_views[sheet_idx].update_cell(row_idx, CellState.COMPLETED, answer=answer)
+        
+        # Notify status manager that cell completed
+        if self.cell_completed_callback:
+            self.cell_completed_callback(row_idx)
     
     def _handle_cell_reset(self, payload: dict) -> None:
         """Handle CELL_RESET event - reset cell to pending state."""

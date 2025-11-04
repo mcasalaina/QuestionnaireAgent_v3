@@ -590,6 +590,9 @@ class ParallelExcelProcessor:
                             'row_index': row_idx,
                             'agent_name': agent
                         })
+                        # Update UI progress bar if callback provided (pass sheet and cell info)
+                        if self.progress_callback:
+                            self.progress_callback(agent, msg, progress, sheet_data.sheet_name, row_idx)
                     
                     # Check for cancellation before processing
                     if self.cancelled:

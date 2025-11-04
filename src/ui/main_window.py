@@ -727,7 +727,8 @@ class UIManager:
             self.workbook_view = WorkbookView(
                 answer_frame,
                 workbook_data,
-                ui_queue
+                ui_queue,
+                cell_completed_callback=self.status_manager.mark_cell_completed
             )
             print("DEBUG: WorkbookView created, rendering notebook...")
             logger.info("WorkbookView created, rendering notebook...")
@@ -952,16 +953,20 @@ class UIManager:
         """
         self.error_dialog.show_error(error_type, message, details)
     
-    def update_progress(self, agent: str, message: str, progress: float) -> None:
+    def update_progress(self, agent: str, message: str, progress: float,
+                       sheet_name: str = None, cell_index: int = None) -> None:
         """Update UI with current processing progress.
         
         Args:
             agent: Current agent name.
             message: Status message.
             progress: Completion percentage (0.0 to 1.0).
+            sheet_name: Optional sheet name for spreadsheet mode.
+            cell_index: Optional cell row index for spreadsheet mode.
         """
         # Update status manager on main thread
-        self.root.after(0, self.status_manager.update_progress, agent, message, progress)
+        self.root.after(0, self.status_manager.update_progress, agent, message, progress, 
+                       sheet_name, cell_index)
     
     def update_reasoning(self, message: str) -> None:
         """Update the reasoning display with agent processing details.

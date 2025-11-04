@@ -29,6 +29,11 @@ class StatusManager:
         self.current_message = ""
         self.current_progress = 0.0
         
+        # Spreadsheet mode tracking
+        self.spreadsheet_mode = False
+        self.current_sheet_name = ""
+        self.working_cells = set()  # Set of row indices currently being processed
+        
         self._create_status_ui()
     
     def _create_status_ui(self) -> None:
@@ -78,26 +83,50 @@ class StatusManager:
         
         logger.debug(f"Status set: {message} ({status_type})")
     
-    def update_progress(self, agent: str, message: str, progress: float) -> None:
+    def update_progress(self, agent: str, message: str, progress: float, 
+                       sheet_name: str = None, cell_index: int = None) -> None:
         """Update progress tracking with agent activity.
         
         Args:
             agent: Current agent name.
             message: Current activity message.
             progress: Progress value (0.0 to 1.0).
+            sheet_name: Optional sheet name for spreadsheet mode.
+            cell_index: Optional cell row index for spreadsheet mode.
         """
         self.current_agent = agent
         self.current_message = message
         self.current_progress = progress
         
+        # Update spreadsheet mode tracking
+        if sheet_name is not None and cell_index is not None:
+            self.spreadsheet_mode = True
+            self.current_sheet_name = sheet_name
+            self.working_cells.add(cell_index)
+        
         # Update progress bar
         progress_percentage = progress * 100
         self.progress_bar.config(value=progress_percentage)
         
-        # Update agent activity label
-        agent_display_name = self._format_agent_name(agent)
-        activity_text = f"{agent_display_name}: {message}"
-        self.agent_label.config(text=activity_text)
+        # Update agent activity label based on mode
+        if self.spreadsheet_mode and self.working_cells:
+            # Spreadsheet mode: show which cells are being processed
+            cell_list = sorted(list(self.working_cells))
+            if len(cell_list) == 1:
+                cells_text = f"cell {cell_list[0] + 1}"
+            elif len(cell_list) == 2:
+                cells_text = f"cells {cell_list[0] + 1} and {cell_list[1] + 1}"
+            else:
+                # Format as "cells 1, 2, and 3"
+                cells_text = f"cells {', '.join(str(c + 1) for c in cell_list[:-1])}, and {cell_list[-1] + 1}"
+            
+            activity_text = f"Processing {cells_text} of sheet '{self.current_sheet_name}'"
+            self.agent_label.config(text=activity_text)
+        else:
+            # Single question mode: show agent and message
+            agent_display_name = self._format_agent_name(agent)
+            activity_text = f"{agent_display_name}: {message}"
+            self.agent_label.config(text=activity_text)
         
         # Update main status with progress percentage
         if progress >= 1.0:
@@ -129,6 +158,9 @@ class StatusManager:
         self.current_agent = ""
         self.current_message = ""
         self.current_progress = 0.0
+        self.spreadsheet_mode = False
+        self.current_sheet_name = ""
+        self.working_cells.clear()
         
         logger.debug("Progress tracking hidden")
     
@@ -170,6 +202,15 @@ class StatusManager:
         self.hide_progress()
         
         logger.debug("Status cleared")
+    
+    def mark_cell_completed(self, cell_index: int) -> None:
+        """Remove a cell from the working set when it completes.
+        
+        Args:
+            cell_index: Row index of the completed cell.
+        """
+        self.working_cells.discard(cell_index)
+        logger.debug(f"Cell {cell_index} marked as completed, remaining working cells: {self.working_cells}")
     
     def get_current_status(self) -> dict:
         """Get current status information.
