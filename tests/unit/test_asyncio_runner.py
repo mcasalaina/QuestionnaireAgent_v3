@@ -83,10 +83,11 @@ class TestAsyncioThreadRunner:
         # Shutdown should cancel the running task
         runner.shutdown()
         
-        # Neither callback nor error_callback should be called for cancelled tasks
+        # callback should not be called for cancelled tasks
         assert len(callback_called) == 0
-        # CancelledError should not trigger error_callback
-        assert len(error_called) == 0
+        # error_callback SHOULD be called with CancelledError so futures can complete
+        assert len(error_called) == 1
+        assert isinstance(error_called[0], asyncio.CancelledError)
     
     def test_multiple_coroutines(self):
         """Test that multiple coroutines can be executed."""

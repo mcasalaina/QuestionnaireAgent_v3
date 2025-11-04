@@ -1116,7 +1116,9 @@ class UIManager:
                     cleanup_future.set_result(True)
                 
                 def cleanup_error(e):
-                    logger.warning(f"Error during agent cleanup: {e}")
+                    # Don't log CancelledError as it's expected during shutdown
+                    if not isinstance(e, asyncio.CancelledError):
+                        logger.warning(f"Error during agent cleanup: {e}")
                     cleanup_future.set_exception(e)
                 
                 self.asyncio_runner.run_coroutine(
@@ -1141,7 +1143,9 @@ class UIManager:
                             cleanup_future.set_result(True)
                         
                         def cleanup_error(e):
-                            logger.warning(f"Error cleaning up agent set {idx + 1}: {e}")
+                            # Don't log CancelledError as it's expected during shutdown
+                            if not isinstance(e, asyncio.CancelledError):
+                                logger.warning(f"Error cleaning up agent set {idx + 1}: {e}")
                             cleanup_future.set_exception(e)
                         
                         return cleanup_complete, cleanup_error
@@ -1163,6 +1167,9 @@ class UIManager:
                 future.result(timeout=5.0)
             except concurrent.futures.TimeoutError:
                 logger.warning(f"Cleanup {i + 1} timed out after 5 seconds")
+            except asyncio.CancelledError:
+                # Cleanup was cancelled during shutdown - this is expected
+                logger.debug(f"Cleanup {i + 1} was cancelled during shutdown")
             except Exception as e:
                 logger.warning(f"Cleanup {i + 1} failed: {e}")
         
