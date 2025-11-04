@@ -82,11 +82,7 @@ class ExcelProcessor:
                     if self.cancelled:
                         break
                     
-                    # Emit cell working event
-                    self._emit_event('CELL_WORKING', {
-                        'sheet_index': sheet_idx,
-                        'row_index': row_idx
-                    })
+                    # Mark cell as working (event will be emitted by progress callback)
                     sheet_data.mark_working(row_idx)
                     
                     # Create Question object
@@ -497,12 +493,8 @@ class ParallelExcelProcessor:
                 if self.reasoning_callback:
                     self.reasoning_callback(agent_msg)
                 
-                # Mark cell as working
+                # Mark cell as working (event will be emitted by progress callback)
                 async with self._state_lock:
-                    self._emit_event('CELL_WORKING', {
-                        'sheet_index': sheet_idx,
-                        'row_index': row_idx
-                    })
                     sheet_data.mark_working(row_idx)
                 
                 # Create Question object
@@ -526,6 +518,12 @@ class ParallelExcelProcessor:
                     def progress_callback(agent, msg, progress):
                         progress_msg = f"Agent Set {agent_set_id} - {agent}: {msg} ({progress:.1%})"
                         logger.info(f"📊 {progress_msg}")
+                        # Emit CELL_WORKING event with agent information
+                        self._emit_event('CELL_WORKING', {
+                            'sheet_index': sheet_idx,
+                            'row_index': row_idx,
+                            'agent_name': agent
+                        })
                     
                     result = await coordinator.process_question(
                         question,

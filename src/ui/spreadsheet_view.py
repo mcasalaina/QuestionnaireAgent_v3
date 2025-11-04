@@ -241,7 +241,7 @@ class SpreadsheetView:
             Text to display in response column
         """
         if state == CellState.WORKING:
-            # Map agent names to user-friendly messages in bold
+            # Map agent names to user-friendly messages
             if agent_name == "question_answerer":
                 return "Composing Answer..."
             elif agent_name == "answer_checker":
