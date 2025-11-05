@@ -1,1 +1,1 @@
-"""Multi-agent orchestration using Microsoft Agent Framework."""
+"""Multi-agent orchestration using Azure AI Agent Framework."""
