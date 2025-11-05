@@ -46,49 +46,54 @@ class SpreadsheetView:
         # Create frame to hold sheet
         self.frame = tk.Frame(self.parent)
         
-        # Create Sheet widget
+        # Create Sheet widget with better configuration
         self.sheet = Sheet(
             self.frame,
             headers=["Question", "Response"],
-            header_height=30,
-            default_row_height=25,
-            column_width=400,
-            height=600,
-            width=1020,
+            header_height=35,
+            default_row_height=30,  # Initial row height (will auto-resize)
             show_top_left=False,
             show_row_index=False,
             show_x_scrollbar=True,
             show_y_scrollbar=True,
-            auto_resize_columns=False,
-            auto_resize_rows=True,  # KEY: This enables automatic row height adjustment
+            auto_resize_columns=True,  # Allow columns to resize
+            auto_resize_rows=True,     # KEY: Auto-resize rows for content
             empty_horizontal=0,
             empty_vertical=0,
+            page_up_down_select_row=True,
+            expand_sheet_if_paste_too_big=True,
+            arrow_key_down_right_scroll_page=False,
+            displayed_columns=[0, 1],  # Show both columns
+            all_columns_displayed=True,
+            index_width=0,  # No row index
         )
         
         # Enable features
         self.sheet.enable_bindings(
             "single_select",
-            "column_select",
+            "column_select", 
             "column_width_resize",
             "double_click_column_resize",
             "copy",
             "rc_select",
         )
         
-        # Set column widths
+        # Set initial column widths (will auto-resize based on content)
         self.sheet.column_width(column=0, width=400)  # Question column
-        self.sheet.column_width(column=1, width=600)  # Response column
+        self.sheet.column_width(column=1, width=620)  # Response column
         
-        # Configure text wrapping for all cells
+        # Configure text wrapping and alignment
         self.sheet.set_options(
-            wrap_text=True,  # Enable text wrapping
-            align="w",  # Left align text
+            wrap_text=True,      # Enable text wrapping
+            align="w",           # Left align text
+            header_align="center", # Center align headers
+            auto_resize_default_row_index=True,
         )
         
         # Populate with data
         self._populate_data()
         
-        # Pack the sheet
+        # Pack the sheet to fill available space
         self.sheet.pack(fill="both", expand=True)
         self.frame.pack(fill="both", expand=True)
         
@@ -183,8 +188,6 @@ class SpreadsheetView:
         # Auto-scroll to keep active cell visible
         if state == CellState.WORKING:
             self._auto_scroll_to_row(row_index)
-        
-        # tksheet automatically adjusts row height when auto_resize_rows=True
         
         logger.debug(f"Updated cell [{row_index}] to {state.value}")
     
