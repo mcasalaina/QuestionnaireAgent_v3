@@ -1,4 +1,4 @@
-"""Answer Checker agent executor using Azure AI Agent Framework."""
+"""Answer Checker agent executor using Microsoft Agent Framework."""
 
 import logging
 import time
@@ -304,7 +304,7 @@ Provide your validation decision:"""
             # Log cleanup for debugging
             logger.info("Cleaning up Answer Checker agent...")
             try:
-                # The Azure AI Agent Framework handles agent lifecycle automatically
+                # The Microsoft Agent Framework handles agent lifecycle automatically
                 # when the underlying AzureAIAgentClient is closed
                 logger.debug("Answer Checker agent cleanup completed")
             except Exception as e:

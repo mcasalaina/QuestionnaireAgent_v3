@@ -1,4 +1,4 @@
-"""Multi-agent workflow orchestration using Azure AI Agent Framework."""
+"""Multi-agent workflow orchestration using Microsoft Agent Framework."""
 
 import logging
 import time
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class AgentCoordinator:
-    """Orchestrates multi-agent workflow using Azure AI Agent Framework."""
+    """Orchestrates multi-agent workflow using Microsoft Agent Framework."""
     
     def __init__(self, azure_client: AzureAIAgentClient, bing_connection_id: str, 
                  browser_automation_connection_id: str):
@@ -369,7 +369,7 @@ class AgentCoordinator:
         """Clean up Azure AI agent resources and close the Azure client."""
         try:
             # Clean up individual executors (this will reset local agent references)
-            logger.info("Starting agent cleanup - the Azure AI Agent Framework will handle Azure AI Foundry cleanup when the client is closed...")
+            logger.info("Starting agent cleanup - the Microsoft Agent Framework will handle Azure AI Foundry cleanup when the client is closed...")
             
             if self.question_answerer:
                 await self.question_answerer.cleanup()

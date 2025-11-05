@@ -1,4 +1,4 @@
-"""Question Answerer agent executor using Azure AI Agent Framework."""
+"""Question Answerer agent executor using Microsoft Agent Framework."""
 
 import logging
 import time
@@ -347,7 +347,7 @@ Please provide a comprehensive answer in plain text with supporting documentatio
             # Log cleanup for debugging
             logger.info("Cleaning up Question Answerer agent...")
             try:
-                # The Azure AI Agent Framework handles agent lifecycle automatically
+                # The Microsoft Agent Framework handles agent lifecycle automatically
                 # when the underlying AzureAIAgentClient is closed
                 logger.debug("Question Answerer agent cleanup completed")
             except Exception as e:

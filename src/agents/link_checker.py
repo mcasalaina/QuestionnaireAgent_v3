@@ -1,4 +1,4 @@
-"""Link Checker agent executor using Azure AI Agent Framework."""
+"""Link Checker agent executor using Microsoft Agent Framework."""
 
 import logging
 import time
