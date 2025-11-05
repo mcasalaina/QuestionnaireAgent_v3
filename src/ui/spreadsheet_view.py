@@ -1,29 +1,21 @@
-"""Spreadsheet view using tkinter Treeview for single Excel sheet rendering."""
+"""Spreadsheet view using tksheet for single Excel sheet rendering with automatic text wrapping."""
 
 import tkinter as tk
-from tkinter import ttk
 from typing import Optional
+from tksheet import Sheet
 from utils.data_types import SheetData, CellState
 import logging
-import textwrap
 
 logger = logging.getLogger(__name__)
 
 
 class SpreadsheetView:
-    """Visual representation of a single Excel sheet using tkinter Treeview."""
+    """Visual representation of a single Excel sheet using tksheet with automatic text wrapping."""
     
     # Cell background colors for different states
     COLOR_PENDING = "#FFFFFF"      # White
     COLOR_WORKING = "#FFB6C1"      # Pink
     COLOR_COMPLETED = "#90EE90"    # Light green
-    
-    # Text wrapping configuration
-    MAX_LINES_PER_CELL = 5         # Maximum lines before truncation
-    BASE_ROW_HEIGHT = 28           # Base height for single line of text (includes padding)
-    PIXELS_PER_LINE = 18           # Additional pixels needed per line of text
-    AVG_CHAR_WIDTH_PIXELS = 8      # Average character width in pixels for default font
-    COLUMN_PADDING = 20            # Padding within each column (pixels)
     
     # Agent name to user-friendly message mapping
     AGENT_MESSAGES = {
@@ -42,163 +34,114 @@ class SpreadsheetView:
         """
         self.parent = parent
         self.sheet_data = sheet_data
-        self.treeview: Optional[ttk.Treeview] = None
-        self.row_ids: list[str] = []
-        self.scrollbar_v: Optional[ttk.Scrollbar] = None
-        self.scrollbar_h: Optional[ttk.Scrollbar] = None
+        self.sheet: Optional[Sheet] = None
+        self.frame: Optional[tk.Frame] = None
     
-    def render(self) -> ttk.Treeview:
-        """Create and return configured Treeview widget.
+    def render(self) -> Sheet:
+        """Create and return configured tksheet widget.
         
         Returns:
-            Configured Treeview widget ready for display
+            Configured Sheet widget ready for display
         """
-        # Create frame to hold treeview and scrollbars
-        frame = ttk.Frame(self.parent)
+        # Create frame to hold sheet
+        self.frame = tk.Frame(self.parent)
         
-        # Create Treeview with columns
-        self.treeview = ttk.Treeview(
-            frame,
-            columns=('question', 'response'),
-            show='headings',
-            selectmode='none'
+        # Create Sheet widget
+        self.sheet = Sheet(
+            self.frame,
+            headers=["Question", "Response"],
+            header_height=30,
+            default_row_height=25,
+            column_width=400,
+            height=600,
+            width=1020,
+            show_top_left=False,
+            show_row_index=False,
+            show_x_scrollbar=True,
+            show_y_scrollbar=True,
+            auto_resize_columns=False,
+            auto_resize_rows=True,  # KEY: This enables automatic row height adjustment
+            empty_horizontal=0,
+            empty_vertical=0,
         )
         
-        # Configure column headings
-        self.treeview.heading('question', text='Question')
-        self.treeview.heading('response', text='Response')
+        # Enable features
+        self.sheet.enable_bindings(
+            "single_select",
+            "column_select",
+            "column_width_resize",
+            "double_click_column_resize",
+            "copy",
+            "rc_select",
+        )
         
-        # Configure column widths and properties
-        self.treeview.column('question', width=400, minwidth=200, anchor='w')
-        self.treeview.column('response', width=600, minwidth=300, anchor='w')
+        # Set column widths
+        self.sheet.column_width(column=0, width=400)  # Question column
+        self.sheet.column_width(column=1, width=600)  # Response column
         
-        # Configure initial row height (will be dynamically adjusted based on content)
-        style = ttk.Style()
-        initial_row_height = self._calculate_required_row_height()
-        style.configure("Treeview", rowheight=initial_row_height)
+        # Configure text wrapping for all cells
+        self.sheet.set_options(
+            wrap_text=True,  # Enable text wrapping
+            align="w",  # Left align text
+        )
         
-        # Configure borders and styling - use a combination of approaches
-        style.configure("Treeview", 
-                       background="white",
-                       fieldbackground="white",
-                       selectbackground="#e6f3ff",
-                       selectforeground="black")
+        # Populate with data
+        self._populate_data()
         
-        # Configure header styling with visible borders
-        style.configure("Treeview.Heading",
-                       background="#f0f0f0",
-                       foreground="black",
-                       relief="solid",
-                       borderwidth=1)
+        # Pack the sheet
+        self.sheet.pack(fill="both", expand=True)
+        self.frame.pack(fill="both", expand=True)
         
-        # Map different states for better visual separation
-        style.map("Treeview",
-                 background=[('selected', '#e6f3ff')],
-                 foreground=[('selected', 'black')])
+        logger.debug(f"Rendered tksheet view for sheet '{self.sheet_data.sheet_name}' with {len(self.sheet_data.questions)} questions")
         
-        # Configure Treeview to show lines between items
-        self.treeview.configure(show='tree headings')  # Show both tree lines and headings
-        
-        # Re-configure to show headings only but with better styling
-        self.treeview.configure(show='headings')
-        
-        # Configure cell state tags for styling
-        self._configure_cell_tags()
-        
-        # Add scrollbars
-        self._add_scrollbars(frame)
-        
-        # Insert all rows from sheet data
-        self._populate_rows()
-        
-        # Pack components
-        self.treeview.grid(row=0, column=0, sticky='nsew')
-        self.scrollbar_v.grid(row=0, column=1, sticky='ns')
-        self.scrollbar_h.grid(row=1, column=0, sticky='ew')
-        
-        # Configure grid weights for resizing
-        frame.grid_rowconfigure(0, weight=1)
-        frame.grid_columnconfigure(0, weight=1)
-        
-        # Pack frame in parent
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        logger.debug(f"Rendered spreadsheet view for sheet '{self.sheet_data.sheet_name}' with {len(self.sheet_data.questions)} questions")
-        
-        return self.treeview
+        return self.sheet
     
-    def _configure_cell_tags(self) -> None:
-        """Configure Treeview tags for different cell states."""
-        # Configure cell state colors with alternating backgrounds for better separation
-        self.treeview.tag_configure('pending', background=self.COLOR_PENDING)
-        self.treeview.tag_configure('working', background=self.COLOR_WORKING)
-        self.treeview.tag_configure('completed', background=self.COLOR_COMPLETED)
-        
-        # Add alternating row colors for better visual separation
-        self.treeview.tag_configure('odd_row', background='#f9f9f9')
-        self.treeview.tag_configure('even_row', background='#ffffff')
-        
-        # Working state variants with alternating backgrounds
-        self.treeview.tag_configure('working_odd', background='#FFB6C1')  # Pink
-        self.treeview.tag_configure('working_even', background='#FFC0CB')  # Light pink
-        
-        # Completed state variants with alternating backgrounds  
-        self.treeview.tag_configure('completed_odd', background='#90EE90')  # Light green
-        self.treeview.tag_configure('completed_even', background='#98FB98')  # Pale green
-        
-        # Text color for all states (default black)
-        for tag in ['pending', 'working', 'completed', 'odd_row', 'even_row', 
-                   'working_odd', 'working_even', 'completed_odd', 'completed_even']:
-            self.treeview.tag_configure(tag, foreground='#000000')
-    
-    def _add_scrollbars(self, frame: ttk.Frame) -> None:
-        """Add vertical and horizontal scrollbars to the treeview."""
-        # Vertical scrollbar
-        self.scrollbar_v = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.treeview.yview)
-        self.treeview.configure(yscrollcommand=self.scrollbar_v.set)
-        
-        # Horizontal scrollbar
-        self.scrollbar_h = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=self.treeview.xview)
-        self.treeview.configure(xscrollcommand=self.scrollbar_h.set)
-    
-    def _populate_rows(self) -> None:
-        """Populate treeview with all questions from sheet data."""
-        self.row_ids.clear()
-        
-        # Get dynamic character widths based on actual column sizes
-        question_chars_per_line = self._get_chars_per_line_for_column('question')
+    def _populate_data(self) -> None:
+        """Populate sheet with questions and responses."""
+        data = []
         
         for row_idx, question in enumerate(self.sheet_data.questions):
             state = self.sheet_data.cell_states[row_idx]
             answer = self.sheet_data.answers[row_idx]
             
-            # Wrap both question and response text
-            question_text = self._wrap_text(
-                question,
-                question_chars_per_line,
-                self.MAX_LINES_PER_CELL
-            )
-            response_text = self._get_response_text(state, answer or "", agent_name=None)
-            
-            # Use alternating row colors with state-specific variants
-            is_odd = (row_idx % 2) == 1
-            
-            if state == CellState.WORKING:
-                tag = 'working_odd' if is_odd else 'working_even'
-            elif state == CellState.COMPLETED:
-                tag = 'completed_odd' if is_odd else 'completed_even'
-            else:  # PENDING
-                tag = 'odd_row' if is_odd else 'even_row'
-            
-            row_id = self.treeview.insert(
-                '',
-                'end',
-                values=(question_text, response_text),
-                tags=(tag,)
-            )
-            self.row_ids.append(row_id)
+            response_text = self._get_response_text(state, answer, agent_name=None)
+            data.append([question, response_text])
         
-        logger.debug(f"Populated {len(self.row_ids)} rows in treeview with alternating colors")
+        # Set the data
+        self.sheet.set_sheet_data(data)
+        
+        # Apply cell colors based on state
+        for row_idx in range(len(self.sheet_data.questions)):
+            self._update_row_color(row_idx)
+        
+        logger.debug(f"Populated tksheet with {len(data)} rows")
+    
+    def _update_row_color(self, row_index: int) -> None:
+        """Update the background color of a row based on its state.
+        
+        Args:
+            row_index: Zero-based row index
+        """
+        if row_index < 0 or row_index >= len(self.sheet_data.cell_states):
+            return
+        
+        state = self.sheet_data.cell_states[row_index]
+        
+        # Determine color based on state
+        if state == CellState.WORKING:
+            color = self.COLOR_WORKING
+        elif state == CellState.COMPLETED:
+            color = self.COLOR_COMPLETED
+        else:  # PENDING
+            color = self.COLOR_PENDING
+        
+        # Apply color to both cells in the row
+        self.sheet.highlight_rows(
+            rows=[row_index],
+            bg=color,
+            fg="black",
+            redraw=True
+        )
     
     def update_cell(
         self, 
@@ -215,221 +158,35 @@ class SpreadsheetView:
             answer: Answer text (required for COMPLETED state)
             agent_name: Name of the currently active agent (for WORKING state)
         """
-        if row_index < 0 or row_index >= len(self.row_ids):
-            logger.warning(f"Invalid row_index: {row_index} (valid range: 0-{len(self.row_ids)-1})")
+        if row_index < 0 or row_index >= len(self.sheet_data.questions):
+            logger.warning(f"Invalid row_index: {row_index} (valid range: 0-{len(self.sheet_data.questions)-1})")
             return
         
-        if not self.treeview:
-            logger.error("Cannot update cell: treeview not initialized")
+        if not self.sheet:
+            logger.error("Cannot update cell: sheet not initialized")
             return
-        
-        row_id = self.row_ids[row_index]
-        question = self.sheet_data.questions[row_index]
-        
-        # Get dynamic character widths based on actual column sizes
-        question_chars_per_line = self._get_chars_per_line_for_column('question')
-        
-        # Wrap both question and response text
-        question_text = self._wrap_text(
-            question,
-            question_chars_per_line,
-            self.MAX_LINES_PER_CELL
-        )
-        response_text = self._get_response_text(state, answer or "", agent_name)
-        
-        # Use alternating row colors with state-specific variants
-        is_odd = (row_index % 2) == 1
-        
-        if state == CellState.WORKING:
-            tag = 'working_odd' if is_odd else 'working_even'
-        elif state == CellState.COMPLETED:
-            tag = 'completed_odd' if is_odd else 'completed_even'
-        else:  # PENDING
-            tag = 'odd_row' if is_odd else 'even_row'
-        
-        # Update the treeview item
-        self.treeview.item(
-            row_id,
-            values=(question_text, response_text),
-            tags=(tag,)
-        )
         
         # Update sheet data to stay in sync
         self.sheet_data.cell_states[row_index] = state
         if answer and state == CellState.COMPLETED:
             self.sheet_data.answers[row_index] = answer
         
-        # Recalculate and update row height if content has changed
-        if state == CellState.COMPLETED and answer:
-            self._update_row_height_if_needed()
+        # Get response text
+        response_text = self._get_response_text(state, answer or "", agent_name)
+        
+        # Update the response cell (column 1)
+        self.sheet.set_cell_data(row_index, 1, value=response_text, redraw=True)
+        
+        # Update row color
+        self._update_row_color(row_index)
         
         # Auto-scroll to keep active cell visible
         if state == CellState.WORKING:
             self._auto_scroll_to_row(row_index)
         
-        logger.debug(f"Updated cell [{row_index}] to {state.value} with alternating color")
-    
-    def _get_chars_per_line_for_column(self, column: str) -> int:
-        """Calculate characters per line based on actual column width.
+        # tksheet automatically adjusts row height when auto_resize_rows=True
         
-        Args:
-            column: Column identifier ('question' or 'response')
-            
-        Returns:
-            Number of characters that can fit per line
-        """
-        if not self.treeview:
-            # Fallback values if treeview not initialized
-            return 45 if column == 'question' else 80
-        
-        # Get actual column width
-        column_width = self.treeview.column(column, 'width')
-        
-        # Calculate usable width (subtract padding)
-        usable_width = column_width - self.COLUMN_PADDING
-        
-        # Calculate characters that fit
-        chars_per_line = max(20, int(usable_width / self.AVG_CHAR_WIDTH_PIXELS))
-        
-        logger.debug(f"Column '{column}' width={column_width}px, usable={usable_width}px, chars_per_line={chars_per_line}")
-        return chars_per_line
-    
-    def _calculate_required_row_height(self) -> int:
-        """Calculate the minimum row height needed to display all content.
-        
-        Returns:
-            Row height in pixels
-        """
-        max_lines = 1
-        
-        # Get dynamic character widths based on actual column sizes
-        question_chars_per_line = self._get_chars_per_line_for_column('question')
-        response_chars_per_line = self._get_chars_per_line_for_column('response')
-        
-        # Check all questions and current answers for maximum line count
-        for row_idx, question in enumerate(self.sheet_data.questions):
-            state = self.sheet_data.cell_states[row_idx]
-            answer = self.sheet_data.answers[row_idx]
-            
-            # Calculate lines for question
-            question_lines = self._count_wrapped_lines(
-                question,
-                question_chars_per_line,
-                self.MAX_LINES_PER_CELL
-            )
-            max_lines = max(max_lines, question_lines)
-            
-            # Calculate lines for response (if completed)
-            if state == CellState.COMPLETED and answer:
-                response_lines = self._count_wrapped_lines(
-                    answer,
-                    response_chars_per_line,
-                    self.MAX_LINES_PER_CELL
-                )
-                max_lines = max(max_lines, response_lines)
-        
-        # Calculate row height: base height + additional height per line
-        # For single line, use base height; for multiple lines, add height per extra line
-        if max_lines == 1:
-            row_height = self.BASE_ROW_HEIGHT
-        else:
-            row_height = self.BASE_ROW_HEIGHT + (max_lines - 1) * self.PIXELS_PER_LINE
-        
-        logger.debug(f"Calculated row height: {row_height}px for max {max_lines} lines")
-        return row_height
-    
-    def _count_wrapped_lines(self, text: str, width: int, max_lines: int = None) -> int:
-        """Count the number of lines the text will occupy when wrapped.
-        
-        Args:
-            text: Text to count lines for
-            width: Maximum characters per line
-            max_lines: Maximum number of lines (None for unlimited)
-            
-        Returns:
-            Number of lines needed
-        """
-        if not text:
-            return 1
-        
-        # Use textwrap to break long lines
-        lines = []
-        for paragraph in text.split('\n'):
-            if paragraph:
-                wrapped = textwrap.fill(
-                    paragraph, 
-                    width=width,
-                    break_long_words=False,
-                    break_on_hyphens=False
-                )
-                lines.extend(wrapped.split('\n'))
-            else:
-                lines.append('')
-        
-        # Apply max_lines limit
-        line_count = len(lines)
-        if max_lines:
-            line_count = min(line_count, max_lines)
-        
-        return max(1, line_count)
-    
-    def _wrap_text(self, text: str, width: int, max_lines: int = None) -> str:
-        """Wrap text to fit within specified character width.
-        
-        Args:
-            text: Text to wrap
-            width: Maximum characters per line
-            max_lines: Maximum number of lines (None for unlimited)
-            
-        Returns:
-            Wrapped text with newlines inserted
-        """
-        if not text:
-            return ""
-        
-        # Use textwrap to break long lines
-        lines = []
-        for paragraph in text.split('\n'):
-            if paragraph:
-                wrapped = textwrap.fill(
-                    paragraph, 
-                    width=width,
-                    break_long_words=False,
-                    break_on_hyphens=False
-                )
-                lines.extend(wrapped.split('\n'))
-            else:
-                lines.append('')
-        
-        # Limit to max_lines if specified
-        if max_lines and len(lines) > max_lines:
-            # Keep first max_lines-1 lines and add ellipsis line
-            # Ensure we don't create negative slice indices or access out of bounds
-            if max_lines > 0 and (max_lines - 1) < len(lines):
-                truncate_pos = max(0, width - 3) if width > 3 else 0
-                lines = lines[:max_lines-1] + [lines[max_lines-1][:truncate_pos] + '...']
-            else:
-                # If max_lines is invalid, just take first max_lines
-                lines = lines[:max_lines]
-        
-        return '\n'.join(lines)
-    
-    def _update_row_height_if_needed(self) -> None:
-        """Recalculate and update row height if content requires it."""
-        if not self.treeview:
-            return
-        
-        # Calculate the required row height based on current content
-        new_height = self._calculate_required_row_height()
-        
-        # Get current row height
-        style = ttk.Style()
-        current_height = style.lookup("Treeview", "rowheight")
-        
-        # Only update if new height is different
-        if current_height != new_height:
-            style.configure("Treeview", rowheight=new_height)
-            logger.debug(f"Updated row height from {current_height}px to {new_height}px")
+        logger.debug(f"Updated cell [{row_index}] to {state.value}")
     
     def _get_response_text(self, state: CellState, answer: str, agent_name: Optional[str] = None) -> str:
         """Get display text for response cell based on state.
@@ -448,15 +205,7 @@ class SpreadsheetView:
             logger.debug(f"Getting response text for agent_name='{agent_name}' -> message='{message}'")
             return message
         elif state == CellState.COMPLETED:
-            # Get dynamic character width for response column
-            response_chars_per_line = self._get_chars_per_line_for_column('response')
-            # Wrap text to fit column width with max 5 lines
-            wrapped = self._wrap_text(
-                answer or "", 
-                response_chars_per_line,
-                self.MAX_LINES_PER_CELL
-            )
-            return wrapped
+            return answer or ""
         else:  # PENDING
             return ""
     
@@ -466,40 +215,24 @@ class SpreadsheetView:
         Args:
             row_index: Row to scroll to
         """
-        if not self.treeview or row_index >= len(self.row_ids):
+        if not self.sheet or row_index >= len(self.sheet_data.questions):
             return
         
         try:
-            # Get the item ID for the row
-            item_id = self.row_ids[row_index]
-            
-            # Calculate scroll position to center the row
-            total_rows = len(self.row_ids)
-            if total_rows > 0:
-                # Scroll to position that shows the row with some context
-                target_position = max(0, (row_index - 3) / total_rows)
-                self.treeview.yview_moveto(target_position)
-                
-                # Ensure the specific item is visible
-                self.treeview.see(item_id)
-            
+            # Use tksheet's see method to make the row visible
+            self.sheet.see(row=row_index, column=0, keep_yscroll=False, keep_xscroll=True)
             logger.debug(f"Auto-scrolled to row {row_index}")
-        
         except Exception as e:
             logger.warning(f"Failed to auto-scroll to row {row_index}: {e}")
     
     def refresh(self) -> None:
         """Redraw entire view from current sheet_data."""
-        if not self.treeview:
-            logger.warning("Cannot refresh: treeview not initialized")
+        if not self.sheet:
+            logger.warning("Cannot refresh: sheet not initialized")
             return
         
-        # Clear existing items
-        for item in self.treeview.get_children():
-            self.treeview.delete(item)
-        
         # Repopulate with current data
-        self._populate_rows()
+        self._populate_data()
         
         logger.debug(f"Refreshed spreadsheet view for sheet '{self.sheet_data.sheet_name}'")
     
@@ -509,29 +242,20 @@ class SpreadsheetView:
         Returns:
             Tuple of (first_visible_row, last_visible_row) indices
         """
-        if not self.treeview or not self.row_ids:
+        if not self.sheet:
             return (0, 0)
         
         try:
-            # Get first and last visible items
-            visible_items = []
-            for item_id in self.row_ids:
-                bbox = self.treeview.bbox(item_id)
-                if bbox:  # Item is visible
-                    visible_items.append(item_id)
-            
-            if not visible_items:
-                return (0, 0)
-            
-            # Find indices of first and last visible items
-            first_visible = self.row_ids.index(visible_items[0])
-            last_visible = self.row_ids.index(visible_items[-1])
-            
-            return (first_visible, last_visible)
-        
+            # Get visible rows from tksheet
+            visible = self.sheet.get_currently_visible()
+            if visible:
+                first_row = visible[0]
+                last_row = visible[1]
+                return (first_row, last_row)
+            return (0, len(self.sheet_data.questions) - 1)
         except Exception as e:
             logger.warning(f"Failed to get visible row range: {e}")
-            return (0, len(self.row_ids) - 1)
+            return (0, len(self.sheet_data.questions) - 1)
     
     def select_row(self, row_index: int) -> None:
         """Select and highlight a specific row.
@@ -539,19 +263,17 @@ class SpreadsheetView:
         Args:
             row_index: Zero-based row index to select
         """
-        if not self.treeview or row_index < 0 or row_index >= len(self.row_ids):
+        if not self.sheet or row_index < 0 or row_index >= len(self.sheet_data.questions):
             return
         
-        # Clear existing selection
-        self.treeview.selection_remove(self.treeview.selection())
-        
-        # Select the specified row
-        item_id = self.row_ids[row_index]
-        self.treeview.selection_add(item_id)
-        self.treeview.focus(item_id)
-        
-        # Ensure it's visible
-        self._auto_scroll_to_row(row_index)
+        try:
+            # Select the row
+            self.sheet.select_row(row_index, redraw=True)
+            
+            # Ensure it's visible
+            self._auto_scroll_to_row(row_index)
+        except Exception as e:
+            logger.warning(f"Failed to select row {row_index}: {e}")
     
     def get_row_count(self) -> int:
         """Get the total number of rows in the view.
@@ -563,17 +285,12 @@ class SpreadsheetView:
     
     def destroy(self) -> None:
         """Clean up the view and its resources."""
-        if self.treeview:
-            self.treeview.destroy()
-            self.treeview = None
+        if self.sheet:
+            self.sheet.destroy()
+            self.sheet = None
         
-        if self.scrollbar_v:
-            self.scrollbar_v.destroy()
-            self.scrollbar_v = None
+        if self.frame:
+            self.frame.destroy()
+            self.frame = None
         
-        if self.scrollbar_h:
-            self.scrollbar_h.destroy()
-            self.scrollbar_h = None
-        
-        self.row_ids.clear()
         logger.debug(f"Destroyed spreadsheet view for sheet '{self.sheet_data.sheet_name}'")
