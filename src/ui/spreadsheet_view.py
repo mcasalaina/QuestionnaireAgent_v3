@@ -17,6 +17,14 @@ class SpreadsheetView:
     COLOR_WORKING = "#FFB6C1"      # Pink
     COLOR_COMPLETED = "#90EE90"    # Light green
     
+    # Agent name to user-friendly message mapping
+    AGENT_MESSAGES = {
+        "question_answerer": "𝗔𝗻𝘀𝘄𝗲𝗿𝗶𝗻𝗴...",
+        "answer_checker": "𝗖𝗵𝗲𝗰𝗸𝗶𝗻𝗴 𝗔𝗻𝘀𝘄𝗲𝗿...",
+        "link_checker": "𝗖𝗵𝗲𝗰𝗸𝗶𝗻𝗴 𝗟𝗶𝗻𝗸𝘀...",
+        None: "𝗔𝗻𝘀𝘄𝗲𝗿𝗶𝗻𝗴..."  # Default fallback
+    }
+    
     def __init__(self, parent: tk.Widget, sheet_data: SheetData):
         """Initialize spreadsheet view.
         
@@ -129,7 +137,7 @@ class SpreadsheetView:
         self.treeview.tag_configure('completed_odd', background='#90EE90')  # Light green
         self.treeview.tag_configure('completed_even', background='#98FB98')  # Pale green
         
-        # Text color for all states
+        # Text color for all states (default black)
         for tag in ['pending', 'working', 'completed', 'odd_row', 'even_row', 
                    'working_odd', 'working_even', 'completed_odd', 'completed_even']:
             self.treeview.tag_configure(tag, foreground='#000000')
@@ -152,7 +160,7 @@ class SpreadsheetView:
             state = self.sheet_data.cell_states[row_idx]
             answer = self.sheet_data.answers[row_idx]
             
-            response_text = self._get_response_text(state, answer or "")
+            response_text = self._get_response_text(state, answer or "", agent_name=None)
             
             # Use alternating row colors with state-specific variants
             is_odd = (row_idx % 2) == 1
@@ -178,7 +186,8 @@ class SpreadsheetView:
         self, 
         row_index: int, 
         state: CellState, 
-        answer: Optional[str] = None
+        answer: Optional[str] = None,
+        agent_name: Optional[str] = None
     ) -> None:
         """Update visual state of a single cell.
         
@@ -186,6 +195,7 @@ class SpreadsheetView:
             row_index: Zero-based row index
             state: New cell state
             answer: Answer text (required for COMPLETED state)
+            agent_name: Name of the currently active agent (for WORKING state)
         """
         if row_index < 0 or row_index >= len(self.row_ids):
             logger.warning(f"Invalid row_index: {row_index} (valid range: 0-{len(self.row_ids)-1})")
@@ -197,7 +207,7 @@ class SpreadsheetView:
         
         row_id = self.row_ids[row_index]
         question = self.sheet_data.questions[row_index]
-        response_text = self._get_response_text(state, answer or "")
+        response_text = self._get_response_text(state, answer or "", agent_name)
         
         # Use alternating row colors with state-specific variants
         is_odd = (row_index % 2) == 1
@@ -227,18 +237,22 @@ class SpreadsheetView:
         
         logger.debug(f"Updated cell [{row_index}] to {state.value} with alternating color")
     
-    def _get_response_text(self, state: CellState, answer: str) -> str:
+    def _get_response_text(self, state: CellState, answer: str, agent_name: Optional[str] = None) -> str:
         """Get display text for response cell based on state.
         
         Args:
             state: Current cell state
             answer: Answer text
+            agent_name: Name of the currently active agent (for WORKING state)
             
         Returns:
             Text to display in response column
         """
         if state == CellState.WORKING:
-            return "Working..."
+            # Map agent names to user-friendly messages with fallback
+            message = self.AGENT_MESSAGES.get(agent_name, self.AGENT_MESSAGES[None])
+            logger.debug(f"Getting response text for agent_name='{agent_name}' -> message='{message}'")
+            return message
         elif state == CellState.COMPLETED:
             return answer or ""
         else:  # PENDING

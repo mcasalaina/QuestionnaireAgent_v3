@@ -373,9 +373,11 @@ class WorkbookView:
         """Handle CELL_WORKING event."""
         sheet_idx = payload.get('sheet_index', 0)
         row_idx = payload.get('row_index', 0)
+        agent_name = payload.get('agent_name', None)
+        logger.debug(f"📋 CELL_WORKING event: sheet={sheet_idx}, row={row_idx}, agent_name='{agent_name}'")
         
         if 0 <= sheet_idx < len(self.sheet_views):
-            self.sheet_views[sheet_idx].update_cell(row_idx, CellState.WORKING)
+            self.sheet_views[sheet_idx].update_cell(row_idx, CellState.WORKING, agent_name=agent_name)
     
     def _handle_cell_completed(self, payload: dict) -> None:
         """Handle CELL_COMPLETED event."""
@@ -384,7 +386,7 @@ class WorkbookView:
         answer = payload.get('answer', '')
         
         if 0 <= sheet_idx < len(self.sheet_views):
-            self.sheet_views[sheet_idx].update_cell(row_idx, CellState.COMPLETED, answer)
+            self.sheet_views[sheet_idx].update_cell(row_idx, CellState.COMPLETED, answer=answer)
     
     def _handle_cell_reset(self, payload: dict) -> None:
         """Handle CELL_RESET event - reset cell to pending state."""
