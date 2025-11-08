@@ -117,9 +117,9 @@ class ExcelProcessor:
                                 'agent_name': agent
                             })
                             logger.debug(f"📤 Emitted CELL_WORKING event with agent_name='{agent}'")
-                            # Update UI progress bar if callback provided
+                            # Update UI progress bar if callback provided (pass sheet and cell info)
                             if self.progress_callback:
-                                self.progress_callback(agent, msg, progress)
+                                self.progress_callback(agent, msg, progress, sheet_data.sheet_name, row_idx)
                         
                         # Create reasoning callback that logs and updates UI
                         def reasoning_callback(msg):
@@ -590,6 +590,9 @@ class ParallelExcelProcessor:
                             'row_index': row_idx,
                             'agent_name': agent
                         })
+                        # Update UI progress bar if callback provided (pass sheet and cell info)
+                        if self.progress_callback:
+                            self.progress_callback(agent, msg, progress, sheet_data.sheet_name, row_idx)
                     
                     # Check for cancellation before processing
                     if self.cancelled:

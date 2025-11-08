@@ -3,7 +3,7 @@
 import tkinter as tk
 from tkinter import ttk
 import queue
-from typing import Optional, List
+from typing import Optional, List, Callable
 from utils.data_types import WorkbookData, NavigationState, UIUpdateEvent, CellState
 from utils.ui_queue import UIUpdateQueue
 from .spreadsheet_view import SpreadsheetView
@@ -23,7 +23,8 @@ class WorkbookView:
         self,
         parent: tk.Widget,
         workbook_data: WorkbookData,
-        ui_update_queue: UIUpdateQueue
+        ui_update_queue: UIUpdateQueue,
+        cell_completed_callback: Optional[Callable[[int], None]] = None
     ):
         """Initialize workbook view.
         
@@ -31,11 +32,14 @@ class WorkbookView:
             parent: Parent tkinter widget
             workbook_data: Complete workbook data
             ui_update_queue: Queue for receiving UI updates
+            cell_completed_callback: Optional callback(row_index) called when a cell completes.
+                The row_index parameter is the 0-based cell row index.
         """
         self.parent = parent
         self.workbook_data = workbook_data
         self.ui_update_queue = ui_update_queue
         self.navigation_state = NavigationState()
+        self.cell_completed_callback = cell_completed_callback
         
         self.sheet_views: List[SpreadsheetView] = []
         self.sheet_frames: List[ttk.Frame] = []
@@ -387,6 +391,13 @@ class WorkbookView:
         
         if 0 <= sheet_idx < len(self.sheet_views):
             self.sheet_views[sheet_idx].update_cell(row_idx, CellState.COMPLETED, answer=answer)
+        
+        # Notify status manager that cell completed (with error handling)
+        if self.cell_completed_callback:
+            try:
+                self.cell_completed_callback(row_idx)
+            except Exception as e:
+                logger.error(f"Error in cell completion callback for row {row_idx}: {e}", exc_info=True)
     
     def _handle_cell_reset(self, payload: dict) -> None:
         """Handle CELL_RESET event - reset cell to pending state."""
