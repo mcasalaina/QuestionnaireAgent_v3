@@ -1194,70 +1194,34 @@ class UIManager:
     
     def _cleanup(self) -> None:
         """Clean up resources before closing."""
-        cleanup_futures = []
+        logger.info("Shutting down application...")
         
-        # Cleanup single-question agent coordinator
-        if self.agent_coordinator:
+        # Close Azure client sessions to prevent "Unclosed client session" warnings
+        # This is fast (milliseconds) and prevents resource warnings at exit
+        try:
+            from utils.azure_auth import azure_authenticator
+            import asyncio
+            
+            # Run the cleanup in a way that doesn't block or timeout
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
-                logger.info("Starting agent cleanup...")
-                cleanup_future = concurrent.futures.Future()
-                
-                def cleanup_complete(result):
-                    logger.info(f"Agent cleanup completed successfully: {result}")
-                    cleanup_future.set_result(True)
-                
-                def cleanup_error(e):
-                    logger.warning(f"Error during agent cleanup: {e}")
-                    cleanup_future.set_exception(e)
-                
-                self.asyncio_runner.run_coroutine(
-                    self.agent_coordinator.cleanup_agents(),
-                    callback=cleanup_complete,
-                    error_callback=cleanup_error
+                # Set a very short timeout - if it takes longer, just move on
+                loop.run_until_complete(
+                    asyncio.wait_for(azure_authenticator.cleanup(), timeout=0.5)
                 )
-                cleanup_futures.append(cleanup_future)
+                logger.debug("Azure client sessions closed cleanly")
+            except asyncio.TimeoutError:
+                logger.debug("Azure cleanup timed out - proceeding with shutdown")
             except Exception as e:
-                logger.warning(f"Error during cleanup: {e}")
+                logger.debug(f"Azure cleanup error (ignored): {e}")
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.debug(f"Error during Azure cleanup: {e}")
         
-        # Cleanup spreadsheet agent coordinators
-        if self.spreadsheet_agent_coordinators:
-            try:
-                logger.info("Starting spreadsheet agent coordinators cleanup...")
-                for i, coordinator in enumerate(self.spreadsheet_agent_coordinators):
-                    cleanup_future = concurrent.futures.Future()
-                    
-                    def make_callbacks(idx):
-                        def cleanup_complete(result):
-                            logger.info(f"Spreadsheet agent set {idx + 1} cleanup completed")
-                            cleanup_future.set_result(True)
-                        
-                        def cleanup_error(e):
-                            logger.warning(f"Error cleaning up agent set {idx + 1}: {e}")
-                            cleanup_future.set_exception(e)
-                        
-                        return cleanup_complete, cleanup_error
-                    
-                    complete_cb, error_cb = make_callbacks(i)
-                    
-                    self.asyncio_runner.run_coroutine(
-                        coordinator.cleanup_agents(),
-                        callback=complete_cb,
-                        error_callback=error_cb
-                    )
-                    cleanup_futures.append(cleanup_future)
-            except Exception as e:
-                logger.warning(f"Error during spreadsheet coordinators cleanup: {e}")
-        
-        # Wait for all cleanups to complete (with timeout)
-        for i, future in enumerate(cleanup_futures):
-            try:
-                future.result(timeout=5.0)
-            except concurrent.futures.TimeoutError:
-                logger.warning(f"Cleanup {i + 1} timed out after 5 seconds")
-            except Exception as e:
-                logger.warning(f"Cleanup {i + 1} failed: {e}")
-        
-        # Shutdown the asyncio runner
+        # Shutdown the asyncio runner immediately
+        # This will cancel any pending tasks which is fine - agents are cleaned up by Azure service
         try:
             self.asyncio_runner.shutdown()
         except Exception as e:
