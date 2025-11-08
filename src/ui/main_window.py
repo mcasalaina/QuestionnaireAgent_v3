@@ -1194,12 +1194,34 @@ class UIManager:
     
     def _cleanup(self) -> None:
         """Clean up resources before closing."""
-        # Don't wait for cleanup - just shutdown immediately for fast exit
-        # Azure AI Agent Service will handle agent cleanup automatically when the client closes
         logger.info("Shutting down application...")
         
+        # Close Azure client sessions to prevent "Unclosed client session" warnings
+        # This is fast (milliseconds) and prevents resource warnings at exit
+        try:
+            from utils.azure_auth import azure_authenticator
+            import asyncio
+            
+            # Run the cleanup in a way that doesn't block or timeout
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                # Set a very short timeout - if it takes longer, just move on
+                loop.run_until_complete(
+                    asyncio.wait_for(azure_authenticator.cleanup(), timeout=0.5)
+                )
+                logger.debug("Azure client sessions closed cleanly")
+            except asyncio.TimeoutError:
+                logger.debug("Azure cleanup timed out - proceeding with shutdown")
+            except Exception as e:
+                logger.debug(f"Azure cleanup error (ignored): {e}")
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.debug(f"Error during Azure cleanup: {e}")
+        
         # Shutdown the asyncio runner immediately
-        # This will cancel any pending tasks (including cleanup) which is fine
+        # This will cancel any pending tasks which is fine - agents are cleaned up by Azure service
         try:
             self.asyncio_runner.shutdown()
         except Exception as e:
