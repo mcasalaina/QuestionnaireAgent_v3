@@ -33,6 +33,8 @@ class StatusManager:
         self.spreadsheet_mode = False
         self.current_sheet_name = ""
         self.working_cells = set()  # Set of row indices currently being processed
+        self.total_cells = 0  # Total cells to process in spreadsheet mode
+        self.completed_cells = 0  # Number of completed cells
         
         self._create_status_ui()
     
@@ -106,10 +108,6 @@ class StatusManager:
             self.current_sheet_name = sheet_name
             self.working_cells.add(cell_index)
         
-        # Update progress bar
-        progress_percentage = progress * 100
-        self.progress_bar.config(value=progress_percentage)
-        
         # Update agent activity label based on mode
         if self.spreadsheet_mode and self.working_cells:
             # Spreadsheet mode: show which cells are being processed
@@ -124,22 +122,37 @@ class StatusManager:
             
             activity_text = f"Processing {cells_text} of sheet '{self.current_sheet_name}'"
             self.agent_label.config(text=activity_text)
+            
+            # In spreadsheet mode, do NOT update progress bar here - only in mark_cell_completed()
+            # Just update status message with current percentage based on completed cells
+            progress_percentage = (self.completed_cells / self.total_cells) * 100 if self.total_cells > 0 else 0.0
+            self.set_status(f"Processing... ({progress_percentage:.1f}%)", "info")
+            
+            logger.debug(f"Progress updated (spreadsheet): {agent} - {message} - Completed: {self.completed_cells}/{self.total_cells} ({progress_percentage:.1f}%)")
         else:
             # Single question mode: show agent and message
             agent_display_name = self._format_agent_name(agent)
             activity_text = f"{agent_display_name}: {message}"
             self.agent_label.config(text=activity_text)
-        
-        # Update main status with progress percentage
-        if progress >= 1.0:
-            self.set_status("Processing completed", "success")
-        else:
-            self.set_status(f"Processing... ({progress_percentage:.1f}%)", "info")
-        
-        logger.debug(f"Progress updated: {agent} - {message} ({progress_percentage:.1f}%)")
+            
+            # In single question mode, update progress bar with agent's progress value
+            progress_percentage = progress * 100
+            self.progress_bar.config(value=progress_percentage)
+            
+            # Update main status with progress percentage
+            if progress >= 1.0:
+                self.set_status("Processing completed", "success")
+            else:
+                self.set_status(f"Processing... ({progress_percentage:.1f}%)", "info")
+            
+            logger.debug(f"Progress updated (single): {agent} - {message} ({progress_percentage:.1f}%)")
     
-    def show_progress(self) -> None:
-        """Show progress tracking components."""
+    def show_progress(self, total_cells: int = 0) -> None:
+        """Show progress tracking components.
+        
+        Args:
+            total_cells: Total number of cells to process (for spreadsheet mode).
+        """
         # Grid the progress bar and agent label
         self.progress_bar.grid(row=0, column=1, sticky="we", padx=(0, 10))
         self.agent_label.grid(row=0, column=2, sticky="w")
@@ -148,7 +161,16 @@ class StatusManager:
         self.progress_bar.config(value=0)
         self.agent_label.config(text="Initializing...")
         
-        logger.debug("Progress tracking shown")
+        # Initialize cell counts for spreadsheet mode
+        if total_cells > 0:
+            self.spreadsheet_mode = True
+            self.total_cells = total_cells
+            self.completed_cells = 0
+            logger.info(f"Progress tracking initialized for spreadsheet mode: total_cells={total_cells}")
+        else:
+            logger.info("Progress tracking shown for single question mode")
+        
+        logger.debug(f"Progress tracking shown (total_cells={total_cells}, spreadsheet_mode={self.spreadsheet_mode})")
     
     def hide_progress(self) -> None:
         """Hide progress tracking components."""
@@ -163,6 +185,8 @@ class StatusManager:
         self.spreadsheet_mode = False
         self.current_sheet_name = ""
         self.working_cells.clear()
+        self.total_cells = 0
+        self.completed_cells = 0
         
         logger.debug("Progress tracking hidden")
     
@@ -211,8 +235,21 @@ class StatusManager:
         Args:
             cell_index: Row index of the completed cell.
         """
+        logger.info(f"mark_cell_completed called: cell_index={cell_index}, total_cells={self.total_cells}, completed_cells={self.completed_cells}")
         self.working_cells.discard(cell_index)
-        logger.debug(f"Cell {cell_index} marked as completed, remaining working cells: {self.working_cells}")
+        # Update progress if we're tracking cells (total_cells > 0 means spreadsheet mode)
+        if self.total_cells > 0:
+            self.completed_cells += 1
+            # Update progress bar to reflect completion
+            progress_percentage = (self.completed_cells / self.total_cells) * 100
+            logger.info(f"Updating progress bar: {progress_percentage:.1f}% ({self.completed_cells}/{self.total_cells})")
+            self.progress_bar.config(value=progress_percentage)
+            # Update status message
+            self.set_status(f"Processing... ({progress_percentage:.1f}%)", "info")
+            logger.info(f"Cell {cell_index} marked as completed ({self.completed_cells}/{self.total_cells}), remaining working cells: {self.working_cells}")
+        else:
+            logger.warning(f"Cell {cell_index} completed but total_cells is 0 - not updating progress (spreadsheet mode not initialized)")
+            logger.debug(f"Cell {cell_index} marked as completed (not in spreadsheet mode)")
     
     def get_current_status(self) -> dict:
         """Get current status information.

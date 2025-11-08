@@ -53,6 +53,33 @@ class UIManager:
             auto_question: Question to process automatically after initialization (optional).
             auto_spreadsheet: Spreadsheet path to process automatically after initialization (optional).
         """
+        # Set up logging first - only enable INFO for UI modules
+        import logging
+        from pathlib import Path
+        
+        # Create logs directory
+        log_dir = Path("logs")
+        log_dir.mkdir(exist_ok=True)
+        
+        # Configure file handler only (no console output)
+        file_handler = logging.FileHandler(log_dir / "questionnaire_agent.log", encoding='utf-8')
+        file_handler.setFormatter(logging.Formatter(
+            '[%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s] %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        ))
+        
+        # Set INFO level for UI modules only
+        ui_logger = logging.getLogger('ui')
+        ui_logger.setLevel(logging.INFO)
+        ui_logger.addHandler(file_handler)
+        ui_logger.propagate = False  # Don't propagate to root logger
+        
+        # Suppress Azure SDK and other verbose loggers
+        logging.getLogger('azure').setLevel(logging.WARNING)
+        logging.getLogger('azure.core').setLevel(logging.WARNING)
+        logging.getLogger('azure.monitor').setLevel(logging.WARNING)
+        logging.getLogger('opentelemetry').setLevel(logging.WARNING)
+        
         self.agent_coordinator = agent_coordinator
         
         # For parallel spreadsheet processing, store 3 coordinators
@@ -350,7 +377,14 @@ class UIManager:
                 self._load_and_display_excel_sync(file_path)
                 
                 # Then start async processing in background
-                self._set_processing_state(True, is_spreadsheet=True)
+                # Get total cells from temp workbook data
+                if hasattr(self, '_temp_workbook_data'):
+                    total_cells = self._temp_workbook_data.total_questions
+                    logger.info(f"Starting spreadsheet processing with total_cells={total_cells} from workbook_data")
+                else:
+                    total_cells = 0
+                    logger.error("_temp_workbook_data not found! Cannot determine total_cells")
+                self._set_processing_state(True, is_spreadsheet=True, total_cells=total_cells)
                 self._start_async_excel_processing(file_path)
                 
             except Exception as e:
@@ -465,6 +499,7 @@ class UIManager:
             
             # Store workbook data for async processing
             self._temp_workbook_data = workbook_data
+            logger.info(f"Stored workbook data with {workbook_data.total_questions} total questions")
             
             self.status_manager.set_status("Spreadsheet loaded - initializing agents...", "info")
             
@@ -724,11 +759,15 @@ class UIManager:
             print(f"DEBUG: Creating WorkbookView with parent: {answer_frame}")
             logger.info(f"Creating WorkbookView with parent: {answer_frame}")
             
+            # Wrap callback to ensure it runs on main thread
+            def cell_completed_callback(cell_index: int):
+                self.root.after(0, self.status_manager.mark_cell_completed, cell_index)
+            
             self.workbook_view = WorkbookView(
                 answer_frame,
                 workbook_data,
                 ui_queue,
-                cell_completed_callback=self.status_manager.mark_cell_completed
+                cell_completed_callback=cell_completed_callback
             )
             print("DEBUG: WorkbookView created, rendering notebook...")
             logger.info("WorkbookView created, rendering notebook...")
@@ -1050,12 +1089,13 @@ class UIManager:
         except Exception as e:
             logger.error(f"Error clearing reasoning display: {e}")
     
-    def _set_processing_state(self, processing: bool, is_spreadsheet: bool = False) -> None:
+    def _set_processing_state(self, processing: bool, is_spreadsheet: bool = False, total_cells: int = 0) -> None:
         """Enable/disable UI elements during processing.
         
         Args:
             processing: Whether processing is active
             is_spreadsheet: Whether this is spreadsheet processing (vs single question)
+            total_cells: Total number of cells to process (for spreadsheet mode)
         """
         self.processing_active = processing
         
@@ -1103,7 +1143,7 @@ class UIManager:
         # Update status
         if processing:
             self.status_manager.set_status("Processing...", "info")
-            self.status_manager.show_progress()
+            self.status_manager.show_progress(total_cells=total_cells)
         else:
             self.status_manager.hide_progress()
     
@@ -1362,7 +1402,14 @@ class UIManager:
             self._load_and_display_excel_sync(file_path)
             
             # Then start async processing in background
-            self._set_processing_state(True, is_spreadsheet=True)
+            # Get total cells from temp workbook data
+            if hasattr(self, '_temp_workbook_data'):
+                total_cells = self._temp_workbook_data.total_questions
+                logger.info(f"Starting spreadsheet processing with total_cells={total_cells} from workbook_data")
+            else:
+                total_cells = 0
+                logger.error("_temp_workbook_data not found! Cannot determine total_cells")
+            self._set_processing_state(True, is_spreadsheet=True, total_cells=total_cells)
             self._start_async_excel_processing(file_path)
             
         except Exception as e:
