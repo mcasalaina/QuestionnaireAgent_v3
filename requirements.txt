@@ -10,6 +10,9 @@ azure-ai-evaluation>=1.0.0
 openpyxl
 pandas
 
+# UI components
+tksheet>=7.5.0
+
 # Web automation for link checking and HTTP requests
 playwright
 requests>=2.28.0
