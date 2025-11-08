@@ -89,7 +89,7 @@ class LinkCheckerExecutor(Executor):
                 chat_client=self.azure_client,
                 tools=browser_tool.definitions,  # Use .definitions property for ChatAgent
                 name="Link Checker",
-                instructions="""You are an expert Link Checker specializing in validating documentation URLs for Microsoft Azure AI services.
+                instructions="""You are an expert Link Checker who validates documentation URLs for accuracy and relevance.
 
 Your role is to verify that provided links are accessible and contain information that is pertinent to the response content.
 
@@ -97,13 +97,11 @@ VERIFICATION PROCESS:
 1. Use the browser automation tool to visit each URL
 2. Verify the link is accessible (loads successfully)
 3. Examine the page content to determine if it's relevant to the answer
-4. Check if the link is from an official Microsoft documentation source
 
 EVALUATION CRITERIA:
 1. Accessibility: Can the link be loaded successfully?
 2. Relevance: Does the page content support or relate to the answer content?
-3. Authority: Is the link from official Microsoft documentation (docs.microsoft.com, learn.microsoft.com, azure.microsoft.com)?
-4. Pertinence: Does the page contain specific information mentioned in or related to the answer?
+3. Pertinence: Does the page contain specific information mentioned in or related to the answer?
 
 RESPONSE FORMAT:
 You MUST start your response with either "LINKS_VALID:" or "LINKS_INVALID:" followed by your analysis.
@@ -113,7 +111,6 @@ For each link in your analysis, please structure your feedback clearly:
 - Indicate if it loaded successfully or not
 - If loaded, briefly describe what content you found
 - Explain how the content relates (or doesn't relate) to the answer
-- Note if it's from an official Microsoft source
 
 If LINKS_VALID:
 - Confirm that links are accessible and relevant
@@ -129,8 +126,7 @@ If LINKS_INVALID:
 IMPORTANT:
 - Use the browser automation tool to actually visit and inspect each link
 - Be explicit and clear when a link has issues (use phrases like "not accessible", "irrelevant", etc.)
-- Focus on official Microsoft documentation sources
-- Verify that page content is current and authoritative
+- Verify that page content is current and accurate
 - Be specific about what you found on each page
 - Reject broken or irrelevant links"""
             )
@@ -169,7 +165,7 @@ IMPORTANT:
                         execution_time
                     )
                     
-                    link_feedback = "Answer must include authoritative documentation links from official Microsoft sources."
+                    link_feedback = "Answer must include authoritative documentation links."
                     
                     # Add agent step to history
                     agent_steps = data.get("agent_steps", [])
@@ -399,13 +395,11 @@ INSTRUCTIONS:
 2. For each link, verify:
    - Can the page be loaded successfully?
    - Does the page content relate to the question and answer?
-   - Is it from an official Microsoft documentation source?
    - Does it contain specific information that supports the answer?
 
 EVALUATION CRITERIA:
 - Are the links accessible and loading successfully?
 - Do the links contain content relevant to the question and answer?
-- Are the links from authoritative Microsoft sources (docs.microsoft.com, learn.microsoft.com, azure.microsoft.com)?
 - Do the pages contain specific information that validates or supports the answer content?
 
 RESPONSE FORMAT:
@@ -415,7 +409,6 @@ For each link, describe:
 - Whether it loaded successfully
 - What content you found on the page
 - How the content relates to the answer
-- Whether it's from an official Microsoft source
 
 Provide your link validation decision:"""
 
