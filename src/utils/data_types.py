@@ -330,11 +330,15 @@ class SheetData:
     question_col_index: Optional[int] = None
     response_col_index: Optional[int] = None
     documentation_col_index: Optional[int] = None
+    row_indices: Optional[List[int]] = None  # Original Excel row numbers (1-based) for each question
     
     def __post_init__(self):
         """Validate invariants."""
         if len(self.questions) != len(self.answers) or len(self.questions) != len(self.cell_states):
             raise ValueError("Questions, answers, and cell_states must have the same length")
+        
+        if self.row_indices is not None and len(self.row_indices) != len(self.questions):
+            raise ValueError("Row indices must have the same length as questions")
         
         if len(self.sheet_name) > 31:
             raise ValueError("Sheet name cannot exceed 31 characters (Excel limit)")
