@@ -142,6 +142,12 @@ class ExcelLoader:
         
         return WorkbookData(file_path=file_path, sheets=sheets)
     
+    # Constants for section header detection heuristics
+    _MIN_TEXT_LENGTH = 3
+    _MAX_NUMBERED_HEADER_LENGTH = 60
+    _MAX_UPPERCASE_HEADER_WORDS = 6
+    _MAX_TITLE_HEADER_WORDS = 5
+    
     def _is_section_header(self, text: str) -> bool:
         """Determine if text appears to be a section header rather than a question.
         
@@ -158,7 +164,7 @@ class ExcelLoader:
         text = text.strip()
         
         # Empty or very short text
-        if len(text) < 3:
+        if len(text) < self._MIN_TEXT_LENGTH:
             return True
         
         # Pattern 1: Starts with common section prefixes like "Section", "Part", "Chapter"
@@ -178,18 +184,18 @@ class ExcelLoader:
         if re.match(r'^(?:\d+\.|\d+\.\d+|[IVXLCDM]+\.|[A-Z]\.)\s+[^?]*$', text):
             # Only consider it a header if it doesn't end with '?'
             if not text.rstrip().endswith('?'):
-                # And if it's relatively short (less than 60 chars without punctuation at end)
-                if len(text) < 60 and not text.rstrip().endswith(('.', '!', '?')):
+                # And if it's relatively short without punctuation at end
+                if len(text) < self._MAX_NUMBERED_HEADER_LENGTH and not text.rstrip().endswith(('.', '!', '?')):
                     return True
         
         # Pattern 4: All uppercase text (likely a header)
-        if text.isupper() and len(text.split()) <= 6:
+        if text.isupper() and len(text.split()) <= self._MAX_UPPERCASE_HEADER_WORDS:
             return True
         
         # Pattern 5: Text that contains only title-like content (no question marks, short)
         # and looks like a category label
         words = text.split()
-        if (len(words) <= 5 and 
+        if (len(words) <= self._MAX_TITLE_HEADER_WORDS and 
             not text.endswith('?') and 
             text.istitle() and 
             ':' in text):
