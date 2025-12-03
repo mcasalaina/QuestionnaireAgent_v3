@@ -84,13 +84,26 @@ class ExcelLoader:
                 continue
             
             # Extract questions from identified question column (0-based to 1-based for openpyxl)
+            # Skip blank rows and section headers, tracking original row indices
             questions = []
+            row_indices = []  # Track original Excel row numbers (1-based)
+            
             for row in ws.iter_rows(min_row=2, min_col=question_col+1, max_col=question_col+1):
                 cell = row[0]
-                if cell.value and str(cell.value).strip():
-                    questions.append(str(cell.value).strip())
-                else:
-                    break  # Stop at first empty cell
+                cell_value = str(cell.value).strip() if cell.value else ''
+                
+                # Skip blank cells
+                if not cell_value:
+                    logger.debug(f"Skipping blank row {cell.row} in sheet '{sheet_name}'")
+                    continue
+                
+                # Skip section headers (heuristic detection)
+                if self._is_section_header(cell_value):
+                    logger.info(f"Skipping section header at row {cell.row} in sheet '{sheet_name}': '{cell_value}'")
+                    continue
+                
+                questions.append(cell_value)
+                row_indices.append(cell.row)  # Store the actual Excel row number (1-based)
             
             if not questions:
                 logger.warning(f"Sheet '{sheet_name}' has no questions, skipping")
@@ -100,8 +113,9 @@ class ExcelLoader:
             if len(questions) > 100:
                 logger.warning(f"Sheet '{sheet_name}' has {len(questions)} questions, limiting to 100")
                 questions = questions[:100]
+                row_indices = row_indices[:100]
             
-            # Create SheetData with column mapping
+            # Create SheetData with column mapping and row indices
             sheet_data = SheetData(
                 sheet_name=sheet_name,
                 sheet_index=len(sheets),  # Reindex after filtering
@@ -110,7 +124,8 @@ class ExcelLoader:
                 cell_states=[CellState.PENDING] * len(questions),
                 question_col_index=question_col,
                 response_col_index=response_col,
-                documentation_col_index=doc_col
+                documentation_col_index=doc_col,
+                row_indices=row_indices
             )
             sheets.append(sheet_data)
         
@@ -126,6 +141,61 @@ class ExcelLoader:
         logger.info(f"Loaded {len(sheets)} sheets with {total_questions} total questions")
         
         return WorkbookData(file_path=file_path, sheets=sheets)
+    
+    def _is_section_header(self, text: str) -> bool:
+        """Determine if text appears to be a section header rather than a question.
+        
+        Uses heuristic rules to detect common section header patterns.
+        
+        Args:
+            text: The cell text to analyze
+            
+        Returns:
+            True if the text appears to be a section header, False otherwise
+        """
+        import re
+        
+        text = text.strip()
+        
+        # Empty or very short text
+        if len(text) < 3:
+            return True
+        
+        # Pattern 1: Starts with common section prefixes like "Section", "Part", "Chapter"
+        section_prefixes = (
+            'section ', 'part ', 'chapter ', 'category ', 'topic ', 
+            'section:', 'part:', 'chapter:', 'category:', 'topic:',
+            '---', '===', '***', '###'
+        )
+        if text.lower().startswith(section_prefixes):
+            return True
+        
+        # Pattern 2: Entirely wrapped in decorators (dashes, equals, asterisks)
+        if re.match(r'^[-=*#]+\s*.*\s*[-=*#]+$', text):
+            return True
+        
+        # Pattern 3: Numbered sections like "1.", "1.1", "I.", "A." followed by short title
+        if re.match(r'^(?:\d+\.|\d+\.\d+|[IVXLCDM]+\.|[A-Z]\.)\s+[^?]*$', text):
+            # Only consider it a header if it doesn't end with '?'
+            if not text.rstrip().endswith('?'):
+                # And if it's relatively short (less than 60 chars without punctuation at end)
+                if len(text) < 60 and not text.rstrip().endswith(('.', '!', '?')):
+                    return True
+        
+        # Pattern 4: All uppercase text (likely a header)
+        if text.isupper() and len(text.split()) <= 6:
+            return True
+        
+        # Pattern 5: Text that contains only title-like content (no question marks, short)
+        # and looks like a category label
+        words = text.split()
+        if (len(words) <= 5 and 
+            not text.endswith('?') and 
+            text.istitle() and 
+            ':' in text):
+            return True
+        
+        return False
     
     def save_workbook(self, workbook_data: WorkbookData, output_path: str = None) -> str:
         """Save all answers back to the Excel file.
@@ -166,10 +236,15 @@ class ExcelLoader:
             if ws.cell(row=1, column=response_col + 1).value is None:
                 ws.cell(row=1, column=response_col + 1, value="Response")
             
-            # Write answers starting from row 2
-            for row_idx, answer in enumerate(sheet_data.answers, start=2):
+            # Write answers to the correct rows using stored row indices
+            for i, answer in enumerate(sheet_data.answers):
                 if answer:
-                    ws.cell(row=row_idx, column=response_col + 1, value=answer)
+                    # Use the original row index if available, otherwise fall back to sequential
+                    if sheet_data.row_indices and i < len(sheet_data.row_indices):
+                        row_num = sheet_data.row_indices[i]
+                    else:
+                        row_num = i + 2  # Fallback to sequential starting from row 2
+                    ws.cell(row=row_num, column=response_col + 1, value=answer)
         
         try:
             wb.save(save_path)
