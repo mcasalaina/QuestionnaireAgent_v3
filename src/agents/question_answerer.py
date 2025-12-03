@@ -56,6 +56,13 @@ CRITICAL - RESPONSE STYLE:
 - Provide ONLY the direct answer to the question without any preamble
 - Start your response immediately with the answer content
 
+CRITICAL - NO READER INSTRUCTIONS:
+- NEVER include instructions or recommendations to the reader (e.g., "Always review the latest documentation", "Consult with a sales representative", "Check with your administrator")
+- NEVER include disclaimers about information changing (e.g., "since the bundling and commercial packaging of features may change")
+- NEVER suggest the reader do additional research or verification
+- NEVER include phrases like "always", "be sure to", "make sure to", "remember to", "consider", "it is recommended that you"
+- The answer should contain ONLY factual information, not advice or instructions to the reader
+
 FORMATTING REQUIREMENTS:
 - Write in PLAIN TEXT ONLY - no markdown, no bold, no italics, no headers
 - Do NOT use **bold**, *italics*, `code blocks`, or # headers
