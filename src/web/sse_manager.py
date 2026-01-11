@@ -118,7 +118,7 @@ class SSEManager:
         )
 
     async def send_answer(self, session_id: str, row: int, question: str,
-                          answer: str, reasoning: str = "") -> bool:
+                          answer: str, reasoning: str = "", documentation: str = None) -> bool:
         """Send an answer completed event.
 
         Args:
@@ -127,6 +127,7 @@ class SSEManager:
             question: The question text
             answer: The generated answer
             reasoning: Optional reasoning trace
+            documentation: Optional documentation links (newline-separated)
 
         Returns:
             True if event was sent
@@ -134,7 +135,7 @@ class SSEManager:
         return await self.send_event(
             session_id,
             SSEMessageType.ANSWER,
-            {"row": row, "question": question, "answer": answer, "reasoning": reasoning}
+            {"row": row, "question": question, "answer": answer, "reasoning": reasoning, "documentation": documentation}
         )
 
     async def send_error(self, session_id: str, message: str,
@@ -155,13 +156,14 @@ class SSEManager:
         return await self.send_event(session_id, SSEMessageType.ERROR, data)
 
     async def send_complete(self, session_id: str, total_processed: int,
-                            duration_seconds: float) -> bool:
+                            duration_seconds: float, total_sheets: int = 1) -> bool:
         """Send a job completion event.
 
         Args:
             session_id: The session UUID
             total_processed: Total rows processed
             duration_seconds: Total processing time
+            total_sheets: Total number of sheets processed
 
         Returns:
             True if event was sent
@@ -169,7 +171,11 @@ class SSEManager:
         return await self.send_event(
             session_id,
             SSEMessageType.COMPLETE,
-            {"total_processed": total_processed, "duration_seconds": round(duration_seconds, 2)}
+            {
+                "total_processed": total_processed,
+                "duration_seconds": round(duration_seconds, 2),
+                "total_sheets": total_sheets
+            }
         )
 
     async def send_status(self, session_id: str, status: str, job_id: str) -> bool:

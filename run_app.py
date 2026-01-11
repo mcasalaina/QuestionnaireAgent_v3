@@ -146,6 +146,12 @@ def parse_arguments():
         help="Don't automatically open browser (only used with --web)"
     )
 
+    parser.add_argument(
+        "--mockagents",
+        action="store_true",
+        help="Use mock agents for testing (only used with --web)"
+    )
+
     return parser.parse_args()
 
 
@@ -228,21 +234,30 @@ async def initialize_and_run_web(args):
 
         print("✓ Configuration validated successfully")
 
-        # Step 3: Test Azure authentication
-        print("\nTesting Azure authentication...")
-        print("(Checking for existing 'az login' or 'azd login' session)")
+        # Step 3: Test Azure authentication (skip if using mock agents)
+        if not args.mockagents:
+            print("\nTesting Azure authentication...")
+            print("(Checking for existing 'az login' or 'azd login' session)")
 
-        try:
-            await test_authentication()
-            print("✓ Azure authentication successful")
-        except AuthenticationError as e:
-            print(f"\n❌ Authentication Error: {e}")
-            return 1
+            try:
+                await test_authentication()
+                print("✓ Azure authentication successful")
+            except AuthenticationError as e:
+                print(f"\n❌ Authentication Error: {e}")
+                return 1
+        else:
+            print("\nSkipping Azure authentication (mock agents mode)")
 
         # Step 4: Start web server
         print(f"\nStarting web server on http://127.0.0.1:{args.port}")
+        if args.mockagents:
+            print("*** MOCK AGENTS ENABLED - Using mock agents for testing ***")
 
-        from web.app import run_server, cleanup
+        from web.app import run_server, cleanup, set_mock_agents_mode
+
+        # Set mock agents mode if requested
+        if args.mockagents:
+            set_mock_agents_mode(True)
 
         # Start server in background thread
         server_thread = threading.Thread(

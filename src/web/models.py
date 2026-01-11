@@ -163,6 +163,7 @@ class ColumnSuggestions(BaseModel):
     question_column: Optional[str] = None
     context_column: Optional[str] = None
     answer_column: Optional[str] = None
+    documentation_column: Optional[str] = None
     confidence: float = Field(ge=0.0, le=1.0)
     auto_map_success: bool = False
 

@@ -330,11 +330,16 @@ class SheetData:
     question_col_index: Optional[int] = None
     response_col_index: Optional[int] = None
     documentation_col_index: Optional[int] = None
-    
+    documentation: List[Optional[str]] = None  # Documentation links for each question
+
     def __post_init__(self):
         """Validate invariants."""
         if len(self.questions) != len(self.answers) or len(self.questions) != len(self.cell_states):
             raise ValueError("Questions, answers, and cell_states must have the same length")
+
+        # Initialize documentation list if not provided
+        if self.documentation is None:
+            self.documentation = [None] * len(self.questions)
         
         if len(self.sheet_name) > 31:
             raise ValueError("Sheet name cannot exceed 31 characters (Excel limit)")
@@ -359,12 +364,14 @@ class SheetData:
         if 0 <= row_index < len(self.cell_states):
             self.cell_states[row_index] = CellState.WORKING
     
-    def mark_completed(self, row_index: int, answer: str) -> None:
-        """Transitions cell to COMPLETED with answer."""
+    def mark_completed(self, row_index: int, answer: str, documentation: str = None) -> None:
+        """Transitions cell to COMPLETED with answer and optional documentation."""
         if 0 <= row_index < len(self.cell_states):
             self.cell_states[row_index] = CellState.COMPLETED
             self.answers[row_index] = answer
-            
+            if documentation:
+                self.documentation[row_index] = documentation
+
             # Update completion status
             self.is_complete = all(s == CellState.COMPLETED for s in self.cell_states)
 

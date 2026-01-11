@@ -423,6 +423,12 @@ function handleUploadSuccess(data) {
         document.getElementById('question-col-select').value = data.suggested_columns.question_column;
         document.getElementById('answer-col-select').value = data.suggested_columns.answer_column;
 
+        // Set documentation column if identified
+        const docColSelect = document.getElementById('doc-col-select');
+        if (docColSelect && data.suggested_columns.documentation_column) {
+            docColSelect.value = data.suggested_columns.documentation_column;
+        }
+
         // Hide column mapping UI
         document.getElementById('column-mapping').classList.add('hidden');
 
@@ -445,6 +451,12 @@ function handleUploadSuccess(data) {
         }
         if (data.suggested_columns.answer_column) {
             document.getElementById('answer-col-select').value = data.suggested_columns.answer_column;
+        }
+
+        // Set documentation column if suggested
+        const docColSelect = document.getElementById('doc-col-select');
+        if (docColSelect && data.suggested_columns.documentation_column) {
+            docColSelect.value = data.suggested_columns.documentation_column;
         }
 
         // Initialize grid but don't start processing
@@ -530,12 +542,43 @@ function updateColumnSelectors(sheetName) {
     const questionColSelect = document.getElementById('question-col-select');
     const contextColSelect = document.getElementById('context-col-select');
     const answerColSelect = document.getElementById('answer-col-select');
+    const docColSelect = document.getElementById('doc-col-select');
+
+    // Preserve currently selected values
+    const prevQuestion = questionColSelect.value;
+    const prevContext = contextColSelect.value;
+    const prevAnswer = answerColSelect.value;
+    const prevDoc = docColSelect ? docColSelect.value : '';
 
     const columnOptions = columns.map(col => `<option value="${col}">${col}</option>`).join('');
 
+    // Update options
     questionColSelect.innerHTML = columnOptions;
     contextColSelect.innerHTML = '<option value="">Use default context</option>' + columnOptions;
     answerColSelect.innerHTML = columnOptions;
+    if (docColSelect) {
+        docColSelect.innerHTML = '<option value="">No documentation column</option>' + columnOptions;
+    }
+
+    // Restore previous selections if those columns exist in new sheet
+    if (columns.includes(prevQuestion)) {
+        questionColSelect.value = prevQuestion;
+    }
+    if (prevContext && columns.includes(prevContext)) {
+        contextColSelect.value = prevContext;
+    } else if (!prevContext) {
+        contextColSelect.value = '';  // Restore empty selection
+    }
+    if (columns.includes(prevAnswer)) {
+        answerColSelect.value = prevAnswer;
+    }
+    if (docColSelect) {
+        if (prevDoc && columns.includes(prevDoc)) {
+            docColSelect.value = prevDoc;
+        } else if (!prevDoc) {
+            docColSelect.value = '';  // Restore empty selection
+        }
+    }
 }
 
 // ============================================================================
@@ -658,7 +701,7 @@ function handleAnswerUpdate(data) {
 
     // Update grid if available
     if (typeof updateGridCell === 'function') {
-        updateGridCell(data.row, data.answer);
+        updateGridCell(data.row, data.answer, data.documentation || null);
     }
 
     // Clear processing indicator for this row
@@ -683,9 +726,20 @@ function handleErrorMessage(data) {
 function handleProcessingComplete(data) {
     isProcessing = false;
     setProcessingUI(false, 0);
-    document.getElementById('download-btn').disabled = false;
-    updateStatusBar(`Complete. Processed ${data.total_processed} rows.`);
-    showSuccess(`Processing complete! ${data.total_processed} rows processed in ${data.duration_seconds.toFixed(1)}s`);
+
+    // Enable and highlight download button
+    const downloadBtn = document.getElementById('download-btn');
+    downloadBtn.disabled = false;
+    downloadBtn.classList.add('highlight-download');
+
+    // Create comprehensive completion message
+    const sheetText = data.total_sheets > 1 ? `across ${data.total_sheets} sheets` : '';
+    const statusMessage = `✅ Complete! Processed ${data.total_processed} questions ${sheetText} in ${data.duration_seconds.toFixed(1)}s. Ready to download.`;
+
+    updateStatusBar(statusMessage);
+
+    // Show longer-lasting success notification
+    showSuccess(`✅ Processing complete! ${data.total_processed} questions answered ${sheetText}. Click Download Results to save your file.`, 10000);
 }
 
 function handleStatusChange(data) {
@@ -762,7 +816,7 @@ function hideToast() {
     document.getElementById('error-toast').classList.add('hidden');
 }
 
-function showSuccess(message) {
+function showSuccess(message, duration = 3000) {
     const toast = document.getElementById('success-toast');
     const messageEl = document.getElementById('success-message');
     messageEl.textContent = message;
@@ -770,7 +824,7 @@ function showSuccess(message) {
 
     setTimeout(() => {
         toast.classList.add('hidden');
-    }, 3000);
+    }, duration);
 }
 
 function hideSuccessToast() {

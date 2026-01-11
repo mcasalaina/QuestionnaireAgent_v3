@@ -154,22 +154,35 @@ class ExcelLoader:
             if sheet_data.sheet_name not in existing_sheet_names:
                 raise ExcelFormatError(f"Sheet '{sheet_data.sheet_name}' no longer exists in file")
         
-        # Write answers to identified response columns
+        # Write answers and documentation to identified columns
         for sheet_data in workbook_data.sheets:
             ws = wb[sheet_data.sheet_name]
-            
+
             # Determine response column (default to column B if not specified)
             response_col = sheet_data.response_col_index if sheet_data.response_col_index is not None else 1
             response_col_letter = openpyxl.utils.get_column_letter(response_col + 1)  # Convert 0-based to 1-based
-            
+
             # Write header if response column is empty
             if ws.cell(row=1, column=response_col + 1).value is None:
                 ws.cell(row=1, column=response_col + 1, value="Response")
-            
+
             # Write answers starting from row 2
             for row_idx, answer in enumerate(sheet_data.answers, start=2):
                 if answer:
                     ws.cell(row=row_idx, column=response_col + 1, value=answer)
+
+            # Write documentation if documentation column exists and has data
+            if sheet_data.documentation_col_index is not None and hasattr(sheet_data, 'documentation'):
+                doc_col = sheet_data.documentation_col_index
+
+                # Write header if documentation column is empty
+                if ws.cell(row=1, column=doc_col + 1).value is None:
+                    ws.cell(row=1, column=doc_col + 1, value="Documentation")
+
+                # Write documentation starting from row 2
+                for row_idx, doc in enumerate(sheet_data.documentation, start=2):
+                    if doc:
+                        ws.cell(row=row_idx, column=doc_col + 1, value=doc)
         
         try:
             wb.save(save_path)

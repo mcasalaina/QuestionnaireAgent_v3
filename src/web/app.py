@@ -39,10 +39,25 @@ from .models import (
 )
 from .session_manager import session_manager
 from .sse_manager import sse_manager
+from excel.loader import ExcelLoader
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Global flag for mock agents mode
+_mock_agents_mode = False
+
+
+def set_mock_agents_mode(enabled: bool):
+    """Enable or disable mock agents mode for testing.
+
+    Args:
+        enabled: True to use mock agents, False for real agents
+    """
+    global _mock_agents_mode
+    _mock_agents_mode = enabled
+    logger.info(f"Mock agents mode: {'ENABLED' if enabled else 'DISABLED'}")
 
 # Determine static files directory
 STATIC_DIR = Path(__file__).parent / "static"
@@ -191,11 +206,7 @@ async def process_question(request: QuestionRequest):
     start_time = time.time()
 
     try:
-        # Import agent components
-        from agents.workflow_manager import create_agent_coordinator
         from utils.data_types import Question
-        from utils.azure_auth import foundry_agent_session, get_project_client
-        from utils.config import config_manager
 
         # Create question object
         question = Question(
@@ -204,34 +215,52 @@ async def process_question(request: QuestionRequest):
             char_limit=request.char_limit
         )
 
-        # Get Azure client and project client, then create coordinator
-        async with foundry_agent_session() as azure_client:
-            project_client = await get_project_client()
-            coordinator = await create_agent_coordinator(
-                azure_client=azure_client,
-                bing_connection_id=config_manager.get_bing_connection_id(),
-                browser_automation_connection_id=config_manager.get_browser_automation_connection_id(),
-                project_client=project_client
-            )
+        # Create callbacks for processing
+        reasoning_parts = []
 
-            # Create callbacks for processing
-            reasoning_parts = []
+        def progress_callback(agent: str, message: str, progress: float):
+            logger.info(f"[{agent}] {message} ({progress:.1%})")
 
-            def progress_callback(agent: str, message: str, progress: float):
-                logger.info(f"[{agent}] {message} ({progress:.1%})")
+        def reasoning_callback(text: str):
+            reasoning_parts.append(text)
 
-            def reasoning_callback(text: str):
-                reasoning_parts.append(text)
+        # Use mock agents if enabled
+        if _mock_agents_mode:
+            from .mock_agents import create_mock_agent_coordinator
+            coordinator = await create_mock_agent_coordinator()
 
-            # Process with agent coordinator
             result = await coordinator.process_question(
                 question,
                 progress_callback=progress_callback,
                 reasoning_callback=reasoning_callback
             )
 
-            # Cleanup
             await coordinator.cleanup_agents()
+        else:
+            # Use real agents
+            from agents.workflow_manager import create_agent_coordinator
+            from utils.azure_auth import foundry_agent_session, get_project_client
+            from utils.config import config_manager
+
+            # Get Azure client and project client, then create coordinator
+            async with foundry_agent_session() as azure_client:
+                project_client = await get_project_client()
+                coordinator = await create_agent_coordinator(
+                    azure_client=azure_client,
+                    bing_connection_id=config_manager.get_bing_connection_id(),
+                    browser_automation_connection_id=config_manager.get_browser_automation_connection_id(),
+                    project_client=project_client
+                )
+
+                # Process with agent coordinator
+                result = await coordinator.process_question(
+                    question,
+                    progress_callback=progress_callback,
+                    reasoning_callback=reasoning_callback
+                )
+
+                # Cleanup
+                await coordinator.cleanup_agents()
 
         processing_time = time.time() - start_time
 
@@ -430,6 +459,7 @@ async def _identify_columns(workbook_data, columns: dict = None) -> ColumnSugges
             question_column=None,
             context_column=None,
             answer_column=None,
+            documentation_column=None,
             confidence=0.0,
             auto_map_success=False
         )
@@ -446,6 +476,7 @@ async def _identify_columns(workbook_data, columns: dict = None) -> ColumnSugges
             question_column=None,
             context_column=None,
             answer_column=None,
+            documentation_column=None,
             confidence=0.0,
             auto_map_success=False
         )
@@ -502,19 +533,20 @@ For example, if "Question" is column 3, "Response" is column 4, and "Documentati
             # Convert indices to column names
             question_col = sheet_columns[result['question']] if result.get('question') is not None and result['question'] < len(sheet_columns) else None
             answer_col = sheet_columns[result['response']] if result.get('response') is not None and result['response'] < len(sheet_columns) else None
-            context_col = sheet_columns[result['documentation']] if result.get('documentation') is not None and result['documentation'] < len(sheet_columns) else None
+            doc_col = sheet_columns[result['documentation']] if result.get('documentation') is not None and result['documentation'] < len(sheet_columns) else None
 
             # LLM identification has high confidence
             confidence = 1.0 if question_col and answer_col else 0.5
             auto_map_success = question_col is not None and answer_col is not None
 
-            logger.info(f"LLM identified columns - Question: {question_col}, Answer: {answer_col}, Documentation: {context_col}")
+            logger.info(f"LLM identified columns - Question: {question_col}, Answer: {answer_col}, Documentation: {doc_col}")
 
             return ColumnSuggestions(
                 sheet_name=sheet_name,
                 question_column=question_col,
-                context_column=context_col,
+                context_column=None,
                 answer_column=answer_col,
+                documentation_column=doc_col,
                 confidence=confidence,
                 auto_map_success=auto_map_success
             )
@@ -544,6 +576,7 @@ def _identify_columns_heuristic(workbook_data, columns: dict = None) -> ColumnSu
             question_column=None,
             context_column=None,
             answer_column=None,
+            documentation_column=None,
             confidence=0.0,
             auto_map_success=False
         )
@@ -709,6 +742,211 @@ async def start_processing(request: ProcessingStartRequest, background_tasks: Ba
     )
 
 
+async def _run_spreadsheet_workers(
+    session_id: str,
+    session,
+    job,
+    sheet,
+    coordinators: list,
+    questions_to_process: list,
+    total_questions: int,
+    state_lock,
+    default_context: str,
+    char_limit: int
+) -> int:
+    """Run parallel workers to process spreadsheet questions.
+
+    Args:
+        session_id: Session identifier
+        session: Session data object
+        job: Processing job object
+        sheet: Sheet data to process
+        coordinators: List of agent coordinators
+        questions_to_process: List of (row_idx, question_text) tuples
+        total_questions: Total number of questions
+        state_lock: Asyncio lock for thread-safe state updates
+        default_context: Context for questions
+        char_limit: Character limit for answers
+
+    Returns:
+        Number of completed rows
+    """
+    from utils.data_types import Question
+
+    completed_rows = 0
+    cancelled = False
+
+    # Create work queue
+    work_queue = asyncio.Queue()
+    for item in questions_to_process:
+        await work_queue.put(item)
+
+    async def worker(agent_set_id: int, coordinator):
+        """Worker for a single agent set."""
+        nonlocal completed_rows, cancelled
+        worker_processed = 0
+        worker_failed = 0
+
+        logger.info(f"Agent Set {agent_set_id} starting")
+
+        while not cancelled:
+            # Check if job was cancelled
+            current_job = session_manager.get_processing_job(session_id)
+            if not current_job or current_job.status in (JobStatus.CANCELLED, JobStatus.ERROR):
+                cancelled = True
+                break
+
+            try:
+                # Get next question from queue (with timeout)
+                try:
+                    row_idx, question_text = await asyncio.wait_for(
+                        work_queue.get(),
+                        timeout=0.1
+                    )
+                except asyncio.TimeoutError:
+                    # No more work available
+                    break
+
+                logger.info(f"Agent Set {agent_set_id} processing row {row_idx}")
+
+                # Send ROW_STARTED event
+                await sse_manager.send_row_started(session_id, row_idx, total_questions)
+
+                try:
+                    # Create question and process
+                    question = Question(
+                        text=question_text,
+                        context=default_context,
+                        char_limit=char_limit
+                    )
+
+                    reasoning_parts = []
+                    last_agent = [None]  # Use list to allow modification in nested function
+
+                    async def send_agent_progress_safe(sid, row, agent, msg):
+                        """Safe wrapper to send agent progress with error handling."""
+                        try:
+                            result = await sse_manager.send_agent_progress(sid, row, agent, msg)
+                            logger.debug(f"AGENT_PROGRESS sent for row {row}, agent={agent}, result={result}")
+                        except Exception as e:
+                            logger.error(f"Failed to send AGENT_PROGRESS: {e}")
+
+                    def progress_callback(agent: str, message: str, progress: float):
+                        logger.info(f"[Set {agent_set_id}][Row {row_idx}][{agent}] {message}")
+                        # Send agent progress SSE event if agent changed
+                        if agent != last_agent[0] and agent not in ("workflow", "batch"):
+                            last_agent[0] = agent
+                            logger.info(f"Sending AGENT_PROGRESS SSE for row {row_idx}, agent={agent}")
+                            # Schedule async SSE send
+                            asyncio.create_task(
+                                send_agent_progress_safe(session_id, row_idx, agent, message)
+                            )
+
+                    def reasoning_callback(text: str):
+                        reasoning_parts.append(text)
+
+                    result = await coordinator.process_question(
+                        question,
+                        progress_callback=progress_callback,
+                        reasoning_callback=reasoning_callback
+                    )
+
+                    # Get answer
+                    answer = result.answer.content if result.answer else "Error generating answer"
+
+                    # Get documentation links (newline-separated)
+                    documentation = None
+                    if result.answer and hasattr(result.answer, 'documentation_links') and result.answer.documentation_links:
+                        # Handle both string lists and DocumentationLink objects
+                        links = result.answer.documentation_links
+                        if links and isinstance(links[0], str):
+                            documentation = '\n'.join(links)
+                        else:
+                            documentation = '\n'.join(str(link.url) if hasattr(link, 'url') else str(link) for link in links)
+
+                    # Update sheet data (thread-safe)
+                    async with state_lock:
+                        if hasattr(sheet, 'mark_completed'):
+                            sheet.mark_completed(row_idx, answer, documentation)
+                        else:
+                            sheet.answers[row_idx] = answer
+                            if documentation and hasattr(sheet, 'documentation'):
+                                sheet.documentation[row_idx] = documentation
+
+                        # Increment completed rows
+                        completed_rows += 1
+                        current_completed = completed_rows
+
+                        # Update job progress
+                        session_manager.update_job_progress(session_id, current_completed, row_idx + 1)
+                        job.processed_rows = current_completed
+
+                    # Send answer via SSE
+                    await sse_manager.send_answer(
+                        session_id,
+                        row_idx,
+                        question_text,
+                        answer,
+                        _format_reasoning(result, reasoning_parts),
+                        documentation
+                    )
+
+                    # Send progress update
+                    await sse_manager.send_progress(session_id, current_completed, total_questions)
+
+                    worker_processed += 1
+                    logger.info(f"Agent Set {agent_set_id} completed row {row_idx}")
+
+                except Exception as e:
+                    logger.error(f"Agent Set {agent_set_id} error on row {row_idx}: {e}")
+                    await sse_manager.send_error(session_id, str(e), row_idx)
+
+                    # Still count as processed (with error)
+                    async with state_lock:
+                        completed_rows += 1
+                        current_completed = completed_rows
+                        session_manager.update_job_progress(session_id, current_completed, row_idx + 1)
+                        job.processed_rows = current_completed
+
+                    await sse_manager.send_progress(session_id, current_completed, total_questions)
+                    worker_failed += 1
+
+            except Exception as e:
+                logger.error(f"Agent Set {agent_set_id} worker error: {e}", exc_info=True)
+                break
+
+        logger.info(f"Agent Set {agent_set_id} finished: {worker_processed} processed, {worker_failed} failed")
+        return worker_processed, worker_failed
+
+    # Run workers in parallel
+    NUM_AGENT_SETS = len(coordinators)
+    worker_tasks = [
+        asyncio.create_task(worker(i + 1, coordinators[i]))
+        for i in range(NUM_AGENT_SETS)
+    ]
+
+    # Wait for all workers to complete
+    results = await asyncio.gather(*worker_tasks, return_exceptions=True)
+
+    # Log results
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            logger.error(f"Agent Set {i + 1} failed with exception: {result}")
+        else:
+            processed, failed = result
+            logger.info(f"Agent Set {i + 1} result: {processed} processed, {failed} failed")
+
+    # Cleanup all coordinators
+    for i, coordinator in enumerate(coordinators):
+        try:
+            await coordinator.cleanup_agents()
+            logger.info(f"Cleaned up coordinator {i + 1}")
+        except Exception as e:
+            logger.error(f"Error cleaning up coordinator {i + 1}: {e}")
+
+    return completed_rows
+
+
 async def _process_spreadsheet(
     session_id: str,
     sheet,
@@ -722,10 +960,7 @@ async def _process_spreadsheet(
     start_time = time.time()
 
     try:
-        from agents.workflow_manager import create_agent_coordinator
         from utils.data_types import Question
-        from utils.azure_auth import foundry_agent_session, get_project_client
-        from utils.config import config_manager
 
         session = session_manager.get_session(session_id)
 
@@ -762,13 +997,40 @@ async def _process_spreadsheet(
         completed_rows = 0
         cancelled = False
 
-        # Get Azure client and project client
+        # Create agent coordinators (mock or real based on mode)
+        NUM_AGENT_SETS = 3
+        coordinators = []
+
+        if _mock_agents_mode:
+            # Use mock agents for testing
+            from .mock_agents import create_mock_agent_coordinator
+            for i in range(NUM_AGENT_SETS):
+                coordinator = await create_mock_agent_coordinator()
+                coordinators.append(coordinator)
+                logger.info(f"Created mock agent coordinator {i + 1}/{NUM_AGENT_SETS}")
+
+            # Process with mock agents (no context manager needed)
+            completed_rows = await _run_spreadsheet_workers(
+                session_id, session, job, sheet, coordinators,
+                questions_to_process, total_questions, state_lock,
+                default_context, char_limit
+            )
+
+            # Mark complete
+            duration = time.time() - start_time
+            session_manager.update_job_status(session_id, JobStatus.COMPLETED)
+            total_sheets = len(session.workbook_data.sheets) if session.workbook_data else 1
+            await sse_manager.send_complete(session_id, completed_rows, duration, total_sheets)
+            return
+
+        # Use real agents with Azure authentication
+        from agents.workflow_manager import create_agent_coordinator
+        from utils.azure_auth import foundry_agent_session, get_project_client
+        from utils.config import config_manager
+
         async with foundry_agent_session() as azure_client:
             project_client = await get_project_client()
 
-            # Create 3 agent coordinators for parallel processing
-            NUM_AGENT_SETS = 3
-            coordinators = []
             for i in range(NUM_AGENT_SETS):
                 coordinator = await create_agent_coordinator(
                     azure_client=azure_client,
@@ -779,164 +1041,21 @@ async def _process_spreadsheet(
                 coordinators.append(coordinator)
                 logger.info(f"Created agent coordinator {i + 1}/{NUM_AGENT_SETS}")
 
-            # Create work queue
-            work_queue = asyncio.Queue()
-            for item in questions_to_process:
-                await work_queue.put(item)
-
-            async def worker(agent_set_id: int, coordinator):
-                """Worker for a single agent set."""
-                nonlocal completed_rows, cancelled
-                worker_processed = 0
-                worker_failed = 0
-
-                logger.info(f"Agent Set {agent_set_id} starting")
-
-                while not cancelled:
-                    # Check if job was cancelled
-                    current_job = session_manager.get_processing_job(session_id)
-                    if not current_job or current_job.status in (JobStatus.CANCELLED, JobStatus.ERROR):
-                        cancelled = True
-                        break
-
-                    try:
-                        # Get next question from queue (with timeout)
-                        try:
-                            row_idx, question_text = await asyncio.wait_for(
-                                work_queue.get(),
-                                timeout=0.1
-                            )
-                        except asyncio.TimeoutError:
-                            # No more work available
-                            break
-
-                        logger.info(f"Agent Set {agent_set_id} processing row {row_idx}")
-
-                        # Send ROW_STARTED event
-                        await sse_manager.send_row_started(session_id, row_idx, total_questions)
-
-                        try:
-                            # Create question and process
-                            question = Question(
-                                text=question_text,
-                                context=default_context,
-                                char_limit=char_limit
-                            )
-
-                            reasoning_parts = []
-                            last_agent = [None]  # Use list to allow modification in nested function
-
-                            async def send_agent_progress_safe(sid, row, agent, msg):
-                                """Safe wrapper to send agent progress with error handling."""
-                                try:
-                                    result = await sse_manager.send_agent_progress(sid, row, agent, msg)
-                                    logger.debug(f"AGENT_PROGRESS sent for row {row}, agent={agent}, result={result}")
-                                except Exception as e:
-                                    logger.error(f"Failed to send AGENT_PROGRESS: {e}")
-
-                            def progress_callback(agent: str, message: str, progress: float):
-                                logger.info(f"[Set {agent_set_id}][Row {row_idx}][{agent}] {message}")
-                                # Send agent progress SSE event if agent changed
-                                if agent != last_agent[0] and agent not in ("workflow", "batch"):
-                                    last_agent[0] = agent
-                                    logger.info(f"Sending AGENT_PROGRESS SSE for row {row_idx}, agent={agent}")
-                                    # Schedule async SSE send
-                                    asyncio.create_task(
-                                        send_agent_progress_safe(session_id, row_idx, agent, message)
-                                    )
-
-                            def reasoning_callback(text: str):
-                                reasoning_parts.append(text)
-
-                            result = await coordinator.process_question(
-                                question,
-                                progress_callback=progress_callback,
-                                reasoning_callback=reasoning_callback
-                            )
-
-                            # Get answer
-                            answer = result.answer.content if result.answer else "Error generating answer"
-
-                            # Update sheet data (thread-safe)
-                            async with state_lock:
-                                if hasattr(sheet, 'mark_completed'):
-                                    sheet.mark_completed(row_idx, answer)
-                                else:
-                                    sheet.answers[row_idx] = answer
-
-                                # Increment completed rows
-                                completed_rows += 1
-                                current_completed = completed_rows
-
-                                # Update job progress
-                                session_manager.update_job_progress(session_id, current_completed, row_idx + 1)
-                                job.processed_rows = current_completed
-
-                            # Send answer via SSE
-                            await sse_manager.send_answer(
-                                session_id,
-                                row_idx,
-                                question_text,
-                                answer,
-                                _format_reasoning(result, reasoning_parts)
-                            )
-
-                            # Send progress update
-                            await sse_manager.send_progress(session_id, current_completed, total_questions)
-
-                            worker_processed += 1
-                            logger.info(f"Agent Set {agent_set_id} completed row {row_idx}")
-
-                        except Exception as e:
-                            logger.error(f"Agent Set {agent_set_id} error on row {row_idx}: {e}")
-                            await sse_manager.send_error(session_id, str(e), row_idx)
-
-                            # Still count as processed (with error)
-                            async with state_lock:
-                                completed_rows += 1
-                                current_completed = completed_rows
-                                session_manager.update_job_progress(session_id, current_completed, row_idx + 1)
-                                job.processed_rows = current_completed
-
-                            await sse_manager.send_progress(session_id, current_completed, total_questions)
-                            worker_failed += 1
-
-                    except Exception as e:
-                        logger.error(f"Agent Set {agent_set_id} worker error: {e}", exc_info=True)
-                        break
-
-                logger.info(f"Agent Set {agent_set_id} finished: {worker_processed} processed, {worker_failed} failed")
-                return worker_processed, worker_failed
-
-            # Run workers in parallel
-            worker_tasks = [
-                asyncio.create_task(worker(i + 1, coordinators[i]))
-                for i in range(NUM_AGENT_SETS)
-            ]
-
-            # Wait for all workers to complete
-            results = await asyncio.gather(*worker_tasks, return_exceptions=True)
-
-            # Log results
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(f"Agent Set {i + 1} failed with exception: {result}")
-                else:
-                    processed, failed = result
-                    logger.info(f"Agent Set {i + 1} result: {processed} processed, {failed} failed")
-
-            # Cleanup all coordinators
-            for i, coordinator in enumerate(coordinators):
-                try:
-                    await coordinator.cleanup_agents()
-                    logger.info(f"Cleaned up coordinator {i + 1}")
-                except Exception as e:
-                    logger.error(f"Error cleaning up coordinator {i + 1}: {e}")
+            # Process with real agents using shared worker logic
+            completed_rows = await _run_spreadsheet_workers(
+                session_id, session, job, sheet, coordinators,
+                questions_to_process, total_questions, state_lock,
+                default_context, char_limit
+            )
 
         # Mark complete
         duration = time.time() - start_time
         session_manager.update_job_status(session_id, JobStatus.COMPLETED)
-        await sse_manager.send_complete(session_id, completed_rows, duration)
+
+        # Get sheet count for completion message
+        total_sheets = len(session.workbook_data.sheets) if session.workbook_data else 1
+
+        await sse_manager.send_complete(session_id, completed_rows, duration, total_sheets)
 
     except Exception as e:
         logger.error(f"Spreadsheet processing error: {e}", exc_info=True)
@@ -1008,7 +1127,7 @@ async def stop_processing(request: StopProcessingRequest):
 
 @app.get("/api/spreadsheet/download/{session_id}")
 async def download_spreadsheet(session_id: str):
-    """Download the processed spreadsheet."""
+    """Download the processed spreadsheet with answers."""
     session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1016,14 +1135,30 @@ async def download_spreadsheet(session_id: str):
     if not session.temp_file_path or not os.path.exists(session.temp_file_path):
         raise HTTPException(status_code=400, detail="No spreadsheet available for download")
 
-    # TODO: Write answers back to the Excel file before download
-    # For now, return the original file
+    if not session.workbook_data:
+        raise HTTPException(status_code=400, detail="No workbook data available")
 
-    return FileResponse(
-        session.temp_file_path,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename="questionnaire_answered.xlsx"
-    )
+    # Write answers back to the Excel file
+    try:
+        # Create a new temp file for the download with answers
+        download_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+        download_path = download_file.name
+        download_file.close()
+
+        # Use ExcelLoader to save workbook with answers to the new temp file
+        excel_loader = ExcelLoader()
+        excel_loader.save_workbook(session.workbook_data, output_path=download_path)
+
+        logger.info(f"Saved spreadsheet with answers to {download_path}")
+
+        return FileResponse(
+            download_path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename="questionnaire_answered.xlsx"
+        )
+    except Exception as e:
+        logger.error(f"Error saving workbook with answers: {e}")
+        raise HTTPException(status_code=500, detail=f"Error preparing download: {str(e)}")
 
 
 # ============================================================================

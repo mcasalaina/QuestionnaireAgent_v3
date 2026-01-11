@@ -727,6 +727,21 @@ body {
     background-color: var(--color-row-error) !important;
 }
 
+/* Highlight download button when processing complete */
+.btn.highlight-download {
+    animation: pulse-download 2s ease-in-out 3;
+    box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.3);
+}
+
+@keyframes pulse-download {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(76, 175, 80, 0);
+    }
+}
+
 /* Working indicator cell */
 .working-indicator {
     display: flex;

@@ -16,6 +16,10 @@ let answerColumnField = null;
 let activeProcessingRows = new Set();
 const MAX_PROCESSING_ROWS = 3;
 
+// Persistent storage for answers across sheet switches
+// Structure: { sheetName: { rowIndex: { answer: '...', documentation: '...', completed: true } } }
+let sheetAnswers = {};
+
 // ============================================================================
 // Grid Initialization
 // ============================================================================
@@ -35,6 +39,18 @@ function initializeSpreadsheetGrid() {
     const answerColSelect = document.getElementById('answer-col-select');
     answerColumnField = answerColSelect ? answerColSelect.value : null;
 
+    // Get question and documentation columns for visibility
+    const questionColSelect = document.getElementById('question-col-select');
+    const docColSelect = document.getElementById('doc-col-select');
+    const questionColumnField = questionColSelect ? questionColSelect.value : null;
+    const docColumnField = docColSelect ? docColSelect.value : null;
+
+    // Create list of relevant columns (Question, Response, Documentation)
+    const relevantColumns = new Set();
+    if (questionColumnField) relevantColumns.add(questionColumnField);
+    if (answerColumnField) relevantColumns.add(answerColumnField);
+    if (docColumnField) relevantColumns.add(docColumnField);
+
     // Create column definitions (no row number column - user requested removal)
     const columnDefs = [
         ...columns.map(col => ({
@@ -46,6 +62,7 @@ function initializeSpreadsheetGrid() {
             editable: false,
             minWidth: 150,
             flex: 1,
+            hide: !relevantColumns.has(col),  // Hide columns that aren't Question, Response, or Documentation
             cellRenderer: (params) => {
                 // Check if this is the answer column and row is processing
                 if (col === answerColumnField && params.data._processing) {
@@ -96,6 +113,30 @@ function initializeSpreadsheetGrid() {
                 row[col] = '';
             });
             gridData.push(row);
+        }
+    }
+
+    // Restore answers from persistent storage
+    if (sheetAnswers[sheetName]) {
+        for (const rowIndexStr in sheetAnswers[sheetName]) {
+            const rowIndex = parseInt(rowIndexStr);
+            if (rowIndex < gridData.length) {
+                const storedData = sheetAnswers[sheetName][rowIndex];
+                if (storedData.answer && answerColumnField) {
+                    gridData[rowIndex][answerColumnField] = storedData.answer;
+                }
+                if (storedData.documentation) {
+                    // Find documentation column and populate it
+                    const docColSelect = document.getElementById('doc-col-select');
+                    const docColumnField = docColSelect ? docColSelect.value : null;
+                    if (docColumnField) {
+                        gridData[rowIndex][docColumnField] = storedData.documentation;
+                    }
+                }
+                if (storedData.completed) {
+                    gridData[rowIndex]._completed = true;
+                }
+            }
         }
     }
 
@@ -355,8 +396,24 @@ function clearAllWorkingCells() {
 // Grid Updates
 // ============================================================================
 
-function updateGridCell(rowIndex, answer) {
+function updateGridCell(rowIndex, answer, documentation = null) {
     if (!gridApi || rowIndex >= gridData.length) return;
+
+    // Get current sheet name
+    const sheetSelect = document.getElementById('sheet-select');
+    const sheetName = sheetSelect ? sheetSelect.value : null;
+
+    // Store answer in persistent storage
+    if (sheetName) {
+        if (!sheetAnswers[sheetName]) {
+            sheetAnswers[sheetName] = {};
+        }
+        sheetAnswers[sheetName][rowIndex] = {
+            answer: answer,
+            documentation: documentation,
+            completed: true
+        };
+    }
 
     // Remove from active processing set
     activeProcessingRows.delete(rowIndex);
@@ -370,6 +427,15 @@ function updateGridCell(rowIndex, answer) {
     // Update the answer in data
     if (answerColumnField) {
         gridData[rowIndex][answerColumnField] = answer;
+    }
+
+    // Update documentation if provided
+    if (documentation) {
+        const docColSelect = document.getElementById('doc-col-select');
+        const docColumnField = docColSelect ? docColSelect.value : null;
+        if (docColumnField) {
+            gridData[rowIndex][docColumnField] = documentation;
+        }
     }
 
     // Find the row node
