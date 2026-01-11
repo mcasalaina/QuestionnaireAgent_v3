@@ -76,3 +76,8 @@ processed_*
 playwright-browsers/
 
 .github/
+# Playwright MCP screenshots
+.playwright-mcp/
+
+# Virtual environments
+.venv312/
