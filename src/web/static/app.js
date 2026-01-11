@@ -9,6 +9,7 @@
 let sessionId = null;
 let eventSource = null;
 let isProcessing = false;
+let processingCompleted = false;  // Flag to ignore stale events after completion
 let currentJobId = null;
 let currentMode = 'question'; // 'question' or 'spreadsheet'
 
@@ -296,7 +297,10 @@ function formatAnswerWithLinks(text) {
 // ============================================================================
 
 function connectSSE() {
-    if (!sessionId) return;
+    if (!sessionId) {
+        console.error('[SSE] Cannot connect: sessionId is null');
+        return;
+    }
 
     if (eventSource) {
         eventSource.close();
@@ -304,22 +308,27 @@ function connectSSE() {
 
     updateConnectionIndicator(false);
 
+    console.log(`[SSE] Connecting to /api/sse/${sessionId}`);
     eventSource = new EventSource(`/api/sse/${sessionId}`);
+    window.eventSource = eventSource;  // Expose for debugging
 
     eventSource.onopen = () => {
+        console.log('[SSE] Connection opened');
         updateConnectionIndicator(true);
     };
 
     eventSource.onmessage = (event) => {
         try {
             const message = JSON.parse(event.data);
+            console.log('[SSE] Received message:', message.type);
             handleSSEMessage(message);
         } catch (e) {
-            console.error('SSE message parse error:', e);
+            console.error('[SSE] Message parse error:', e);
         }
     };
 
-    eventSource.onerror = () => {
+    eventSource.onerror = (error) => {
+        console.error('[SSE] Connection error:', error, 'ReadyState:', eventSource.readyState);
         updateConnectionIndicator(false);
         updateStatusBar('Connection lost. Reconnecting...');
         // Attempt reconnect after delay
@@ -616,6 +625,7 @@ async function startProcessing() {
             const data = await response.json();
             currentJobId = data.job_id;
             isProcessing = true;
+            processingCompleted = false;  // Reset flag for new job
             setProcessingUI(true, data.total_rows);
             updateStatusBar(`Processing row 1 of ${data.total_rows}...`);
         } else {
@@ -676,6 +686,12 @@ function handleProgressUpdate(data) {
 }
 
 function handleRowStarted(data) {
+    // Ignore stale events after processing has completed
+    if (processingCompleted) {
+        console.log('Ignoring stale ROW_STARTED event after completion');
+        return;
+    }
+
     updateStatusBar(`Processing row ${data.row + 1}...`);
 
     // Highlight current row with "Working..." indicator
@@ -685,6 +701,12 @@ function handleRowStarted(data) {
 }
 
 function handleAgentProgress(data) {
+    // Ignore stale agent progress events after processing has completed
+    if (processingCompleted) {
+        console.log('Ignoring stale AGENT_PROGRESS event after completion');
+        return;
+    }
+
     // Update the agent name for a row being processed
     if (typeof updateRowAgent === 'function') {
         updateRowAgent(data.row, data.agent_name);
@@ -723,9 +745,13 @@ function handleErrorMessage(data) {
     }
 }
 
-function handleProcessingComplete(data) {
+async function handleProcessingComplete(data) {
     isProcessing = false;
+    processingCompleted = true;  // Set flag to ignore stale events
     setProcessingUI(false, 0);
+
+    // Refresh grid with completed data from server
+    await refreshGridWithCompletedData();
 
     // Enable and highlight download button
     const downloadBtn = document.getElementById('download-btn');
@@ -740,6 +766,42 @@ function handleProcessingComplete(data) {
 
     // Show longer-lasting success notification
     showSuccess(`✅ Processing complete! ${data.total_processed} questions answered ${sheetText}. Click Download Results to save your file.`, 10000);
+}
+
+async function refreshGridWithCompletedData() {
+    // Fetch completed data from server for current sheet
+    const sheetName = document.getElementById('sheet-select').value;
+    console.log('[REFRESH] Starting grid refresh for sheet:', sheetName);
+
+    if (!sheetName) {
+        console.error('[REFRESH] No sheet name found');
+        return;
+    }
+
+    try {
+        const url = `/api/spreadsheet/data/${sessionId}/${encodeURIComponent(sheetName)}`;
+        console.log('[REFRESH] Fetching data from:', url);
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.error('[REFRESH] Failed to fetch completed data, status:', response.status);
+            return;
+        }
+
+        const sheetData = await response.json();
+        console.log('[REFRESH] Received sheet data:', sheetData);
+
+        // Update grid with all answers and documentation
+        if (typeof updateGridWithCompletedData === 'function') {
+            console.log('[REFRESH] Calling updateGridWithCompletedData');
+            updateGridWithCompletedData(sheetData);
+        } else {
+            console.error('[REFRESH] updateGridWithCompletedData is not a function!');
+            console.log('[REFRESH] typeof updateGridWithCompletedData:', typeof updateGridWithCompletedData);
+        }
+    } catch (error) {
+        console.error('[REFRESH] Error refreshing grid with completed data:', error);
+    }
 }
 
 function handleStatusChange(data) {

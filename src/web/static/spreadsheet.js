@@ -464,6 +464,62 @@ function setGridRowData(data) {
     gridApi.setRowData(data);
 }
 
+function updateGridWithCompletedData(sheetData) {
+    if (!gridApi) return;
+
+    const answerColSelect = document.getElementById('answer-col-select');
+    const docColSelect = document.getElementById('doc-col-select');
+    const answerColumnField = answerColSelect ? answerColSelect.value : null;
+    const docColumnField = docColSelect ? docColSelect.value : null;
+
+    // Update each row with completed data
+    // When this function is called (only on COMPLETE event), ALL rows should be marked completed
+    for (let i = 0; i < sheetData.answers.length; i++) {
+        const answer = sheetData.answers[i];
+        const documentation = sheetData.documentation[i];
+
+        if (i >= gridData.length) break;
+
+        // Update answer
+        if (answer && answerColumnField) {
+            gridData[i][answerColumnField] = answer;
+        }
+
+        // Update documentation
+        if (documentation && docColumnField) {
+            gridData[i][docColumnField] = documentation;
+        }
+
+        // Mark ALL rows as completed when refresh is called (only happens on COMPLETE event)
+        // If a row has an answer, it's definitely done
+        if (answer) {
+            gridData[i]._completed = true;
+            gridData[i]._processing = false;
+            gridData[i]._error = null;
+            gridData[i]._agentName = null;
+
+            // Store in persistent storage
+            const sheetName = document.getElementById('sheet-select').value;
+            if (sheetName) {
+                if (!sheetAnswers[sheetName]) {
+                    sheetAnswers[sheetName] = {};
+                }
+                sheetAnswers[sheetName][i] = {
+                    answer: answer,
+                    documentation: documentation,
+                    completed: true
+                };
+            }
+        }
+    }
+
+    // Clear all processing states
+    activeProcessingRows.clear();
+
+    // Refresh the entire grid to update all rows
+    gridApi.setRowData(gridData);
+}
+
 function getGridRowData() {
     if (!gridApi) return [];
 
@@ -679,3 +735,10 @@ document.addEventListener('keydown', (e) => {
         gridApi.deselectAll();
     }
 });
+
+// ============================================================================
+// Export functions to global scope for cross-module access
+// ============================================================================
+
+// Make updateGridWithCompletedData available to app.js
+window.updateGridWithCompletedData = updateGridWithCompletedData;

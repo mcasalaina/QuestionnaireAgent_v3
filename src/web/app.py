@@ -882,7 +882,8 @@ async def _run_spreadsheet_workers(
                         job.processed_rows = current_completed
 
                     # Send answer via SSE
-                    await sse_manager.send_answer(
+                    logger.info(f"Sending ANSWER SSE for row {row_idx}")
+                    sent = await sse_manager.send_answer(
                         session_id,
                         row_idx,
                         question_text,
@@ -890,6 +891,7 @@ async def _run_spreadsheet_workers(
                         _format_reasoning(result, reasoning_parts),
                         documentation
                     )
+                    logger.info(f"ANSWER SSE sent={sent} for row {row_idx}")
 
                     # Send progress update
                     await sse_manager.send_progress(session_id, current_completed, total_questions)
@@ -1095,6 +1097,35 @@ async def get_processing_status(session_id: str):
         started_at=job.started_at.isoformat(),
         completed_at=job.completed_at.isoformat() if job.completed_at else None
     )
+
+
+@app.get("/api/spreadsheet/data/{session_id}/{sheet_name}")
+async def get_sheet_data(session_id: str, sheet_name: str):
+    """Get current data for a specific sheet including all answers and documentation."""
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if not session.workbook_data:
+        raise HTTPException(status_code=400, detail="No workbook data loaded")
+
+    # Find the sheet
+    sheet_data = None
+    for sheet in session.workbook_data.sheets:
+        if sheet.sheet_name == sheet_name:
+            sheet_data = sheet
+            break
+
+    if not sheet_data:
+        raise HTTPException(status_code=404, detail=f"Sheet '{sheet_name}' not found")
+
+    # Return the sheet data with answers and documentation
+    return {
+        "sheet_name": sheet_data.sheet_name,
+        "answers": sheet_data.answers,
+        "documentation": sheet_data.documentation if hasattr(sheet_data, 'documentation') else [None] * len(sheet_data.answers),
+        "cell_states": [state.value for state in sheet_data.cell_states]
+    }
 
 
 @app.post("/api/spreadsheet/stop", response_model=StopProcessingResponse)
