@@ -22,53 +22,52 @@ logger = logging.getLogger(__name__)
 
 class LinkCheckerExecutor(Executor):
     """Executor for the Link Checker agent in the multi-agent workflow."""
-    
-    def __init__(self, azure_client: AzureAIAgentClient, browser_automation_connection_id: str):
+
+    def __init__(self, azure_client: AzureAIAgentClient, browser_automation_connection_id: str, project_client=None):
         """Initialize the Link Checker executor.
-        
+
         Args:
             azure_client: Azure AI Agent client instance.
             browser_automation_connection_id: Browser automation connection name for web verification.
+            project_client: Azure AI Project client for connection resolution (optional).
         """
         super().__init__(id="link_checker")
         self.azure_client = azure_client
         self.browser_automation_connection_name = browser_automation_connection_id
         self.browser_automation_connection_id: Optional[str] = None
+        self.project_client = project_client
         self.agent: Optional[ChatAgent] = None
     
     async def _resolve_connection_id(self) -> str:
         """Resolve the full connection ID from the connection name.
-        
+
         Uses AIProjectClient.connections.get() to retrieve the full resource ID
         in the format: /subscriptions/.../connections/<connection_name>
-        
+
         Returns:
             The full connection ID.
-            
+
         Raises:
             AgentExecutionError: If connection cannot be resolved.
         """
         if self.browser_automation_connection_id:
             return self.browser_automation_connection_id
-        
+
         try:
             logger.debug(f"Resolving connection ID for: {self.browser_automation_connection_name}")
-            
-            # Get the AIProjectClient from the azure_client
-            # The azure_client is an AzureAIAgentClient which contains project_client
-            if hasattr(self.azure_client, 'project_client'):
-                project_client = self.azure_client.project_client
-            else:
-                raise AgentExecutionError("Cannot access project_client from azure_client")
-            
+
+            # Use the project_client passed during initialization
+            if self.project_client is None:
+                raise AgentExecutionError("project_client not provided - cannot resolve browser automation connection")
+
             # Get the connection by name to retrieve its full ID
             # Note: connections.get() is async and must be awaited
-            connection = await project_client.connections.get(self.browser_automation_connection_name)
+            connection = await self.project_client.connections.get(self.browser_automation_connection_name)
             self.browser_automation_connection_id = connection.id
-            
+
             logger.debug(f"Resolved connection ID: {self.browser_automation_connection_id}")
             return self.browser_automation_connection_id
-            
+
         except Exception as e:
             error_msg = f"Failed to resolve Browser Automation connection '{self.browser_automation_connection_name}': {str(e)}"
             logger.error(error_msg, exc_info=True)

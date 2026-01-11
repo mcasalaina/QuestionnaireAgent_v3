@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 from typing import Optional
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
@@ -14,9 +15,17 @@ from azure.identity import (
     ManagedIdentityCredential
 )
 from azure.core.exceptions import ClientAuthenticationError, ResourceNotFoundError
-from agent_framework_azure_ai import AzureAIAgentClient
 from .config import config_manager
 from .exceptions import AuthenticationError, AzureServiceError
+
+# Set AZURE_AI_PROJECT_ENDPOINT from AZURE_OPENAI_ENDPOINT if not already set
+# The agent_framework_azure_ai SDK expects this environment variable
+if not os.environ.get("AZURE_AI_PROJECT_ENDPOINT"):
+    endpoint = config_manager.get_azure_endpoint()
+    if endpoint:
+        os.environ["AZURE_AI_PROJECT_ENDPOINT"] = endpoint
+
+from agent_framework_azure_ai import AzureAIAgentClient
 
 
 logger = logging.getLogger(__name__)
@@ -165,6 +174,7 @@ class AzureAuthenticator:
             
             self._client = AzureAIAgentClient(
                 project_client=self._project_client,
+                credential=credential,
                 model_deployment_name=model_deployment
             )
             
@@ -334,17 +344,35 @@ async def verify_azure_connectivity() -> bool:
 
 async def get_azure_client() -> AzureAIAgentClient:
     """Get authenticated Azure AI Agent client.
-    
+
     This is a convenience function for getting the global client instance.
-    
+
     Returns:
         Configured AzureAIAgentClient instance.
-        
+
     Raises:
         AuthenticationError: If authentication fails.
         AzureServiceError: If Azure services are unavailable.
     """
     return await azure_authenticator.get_azure_client()
+
+
+async def get_project_client():
+    """Get the Azure AI Project client.
+
+    This is needed for operations that require direct access to the project client,
+    such as resolving connection IDs for browser automation.
+
+    Returns:
+        AIProjectClient instance.
+
+    Raises:
+        AuthenticationError: If authentication fails.
+        AzureServiceError: If Azure services are unavailable.
+    """
+    # Ensure the clients are initialized
+    await azure_authenticator.get_azure_client()
+    return azure_authenticator._project_client
 
 
 def reset_azure_authentication() -> None:
