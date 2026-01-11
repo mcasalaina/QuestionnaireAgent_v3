@@ -39,3 +39,6 @@ python-multipart>=0.0.6
 # pip install agent-framework-azure-ai --pre
 # Note: Install Playwright browsers with:
 # playwright install chromium firefox webkit
+# Note: For GUI windowed mode (non-web), install tkinter:
+# macOS: brew install python-tk@3.12
+# Linux: sudo apt-get install python3-tk
