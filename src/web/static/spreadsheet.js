@@ -12,6 +12,10 @@ let gridData = [];
 let currentProcessingRow = null;
 let answerColumnField = null;
 
+// Track which rows are actively processing (max 3 at a time)
+let activeProcessingRows = new Set();
+const MAX_PROCESSING_ROWS = 3;
+
 // ============================================================================
 // Grid Initialization
 // ============================================================================
@@ -31,17 +35,8 @@ function initializeSpreadsheetGrid() {
     const answerColSelect = document.getElementById('answer-col-select');
     answerColumnField = answerColSelect ? answerColSelect.value : null;
 
-    // Create column definitions
+    // Create column definitions (no row number column - user requested removal)
     const columnDefs = [
-        {
-            headerName: '#',
-            field: 'rowIndex',
-            width: 60,
-            pinned: 'left',
-            sortable: false,
-            filter: false,
-            cellClass: 'row-number-cell'
-        },
         ...columns.map(col => ({
             headerName: col,
             field: col,
@@ -70,6 +65,10 @@ function initializeSpreadsheetGrid() {
                     if (params.data._error) {
                         return 'answer-error';
                     }
+                    // Don't apply answer-filled during processing - only when truly completed
+                    if (params.data._processing) {
+                        return 'answer-empty';
+                    }
                     return params.value ? 'answer-filled' : 'answer-empty';
                 }
                 return '';
@@ -84,6 +83,7 @@ function initializeSpreadsheetGrid() {
             ...row,
             rowIndex: idx,
             _processing: false,
+            _completed: false,
             _error: null,
             _agentName: null
         }));
@@ -91,13 +91,16 @@ function initializeSpreadsheetGrid() {
         // Fallback: create placeholder rows if no data available
         gridData = [];
         for (let i = 0; i < (uploadedData.row_count || 10); i++) {
-            const row = { rowIndex: i, _processing: false, _error: null, _agentName: null };
+            const row = { rowIndex: i, _processing: false, _completed: false, _error: null, _agentName: null };
             columns.forEach(col => {
                 row[col] = '';
             });
             gridData.push(row);
         }
     }
+
+    // Reset active processing rows when initializing new grid
+    activeProcessingRows.clear();
 
     // Grid options
     const gridOptions = {
@@ -127,6 +130,9 @@ function initializeSpreadsheetGrid() {
             }
             if (params.data._error) {
                 return 'row-error';
+            }
+            if (params.data._completed) {
+                return 'row-completed';
             }
             return '';
         },
@@ -164,9 +170,22 @@ function initializeSpreadsheetGrid() {
 function setRowProcessing(rowIndex, processing) {
     if (!gridApi || rowIndex >= gridData.length) return;
 
+    if (processing) {
+        // Always clear completed state when starting to process (for retry scenarios)
+        // This must happen regardless of whether we're at the limit
+        gridData[rowIndex]._completed = false;
+
+        // Track in active set (allow up to MAX_PROCESSING_ROWS)
+        activeProcessingRows.add(rowIndex);
+    } else {
+        // Remove from active set
+        activeProcessingRows.delete(rowIndex);
+    }
+
     // Update data
     gridData[rowIndex]._processing = processing;
     gridData[rowIndex]._error = null;
+
     // Clear agent name when not processing
     if (!processing) {
         gridData[rowIndex]._agentName = null;
@@ -191,9 +210,13 @@ function setRowProcessing(rowIndex, processing) {
 function setRowError(rowIndex, errorMessage) {
     if (!gridApi || rowIndex >= gridData.length) return;
 
+    // Remove from active processing set
+    activeProcessingRows.delete(rowIndex);
+
     // Update data
     gridData[rowIndex]._processing = false;
     gridData[rowIndex]._error = errorMessage;
+    gridData[rowIndex]._agentName = null;
 
     // Update the answer cell with error message
     if (answerColumnField) {
@@ -265,8 +288,12 @@ function formatAgentName(agentName) {
 function updateGridCell(rowIndex, answer) {
     if (!gridApi || rowIndex >= gridData.length) return;
 
-    // Clear processing state
+    // Remove from active processing set
+    activeProcessingRows.delete(rowIndex);
+
+    // Clear processing state and mark as completed
     gridData[rowIndex]._processing = false;
+    gridData[rowIndex]._completed = true;  // Mark as completed for green highlight
     gridData[rowIndex]._error = null;
     gridData[rowIndex]._agentName = null;
 
@@ -451,6 +478,15 @@ gridStyles.textContent = `
     /* Error row highlight */
     .ag-theme-alpine .row-error {
         background-color: #FDE7E9 !important;
+    }
+
+    /* Completed row highlight (light green) */
+    .ag-theme-alpine .row-completed {
+        background-color: #E6F4EA !important;
+    }
+
+    .ag-theme-alpine .row-completed:hover {
+        background-color: #D4EDDA !important;
     }
 
     /* Working indicator */

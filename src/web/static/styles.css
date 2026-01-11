@@ -134,6 +134,18 @@ body {
     margin: 0 auto;
 }
 
+.header-title {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.header-logo {
+    height: 32px;
+    width: auto;
+    object-fit: contain;
+}
+
 .app-title {
     font-size: var(--font-size-xl);
     font-weight: var(--font-weight-semibold);

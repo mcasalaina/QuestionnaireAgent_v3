@@ -112,6 +112,41 @@ python run_app.py --context "Azure AI" --charlimit 1500 --spreadsheet ./path/to/
 python run_app.py --help
 ```
 
+### Web Interface
+
+The application also provides a browser-based web interface for processing questions and spreadsheets.
+
+**Start the Web Server:**
+```bash
+# Start web server on default port (8080) and auto-open browser
+python run_app.py --web
+
+# Start on a custom port
+python run_app.py --web --port 3000
+
+# Start without opening browser (useful for automated testing or remote servers)
+python run_app.py --web --port 8080 --no-browser
+```
+
+**Web Interface Features:**
+- **Single Question Mode**: Enter a question in the sidebar and click "Ask!" to get an answer
+- **Spreadsheet Mode**: Click "Import From Excel" to upload a spreadsheet with questions
+- **Auto-mapping**: Automatically detects Question and Answer columns in uploaded spreadsheets
+- **Parallel Processing**: Processes up to 3 questions simultaneously using multiple agent sets
+- **Real-time Updates**: Live progress via Server-Sent Events (SSE)
+- **Visual Feedback**:
+  - Pink rows indicate questions currently being processed
+  - Light green rows indicate completed answers
+  - Status bar shows current processing progress
+- **Sheet Tabs**: Navigate between sheets in multi-sheet workbooks
+- **Download Results**: Export processed spreadsheet when complete
+
+**Web Interface Layout:**
+- **Left Sidebar**: Configuration (Context, Character Limit, Retries), Question input, Import/Export buttons
+- **Main Panel**: Answer display (single question) or spreadsheet grid (batch processing)
+- **Status Bar**: Connection status, processing progress, and status messages
+- **Header**: Azure authentication status indicator
+
 **Single Question Mode:**
 1. Enter your context (default: "Microsoft Azure AI")
 2. Set character limit (default: 2000)
@@ -274,9 +309,19 @@ QuestionnaireAgent_v3/
 │   ├── agents/                  # Agent implementations
 │   │   ├── __init__.py
 │   │   ├── workflow_manager.py
-│   ├── ui/                      # GUI components
+│   │   └── ...
+│   ├── ui/                      # Desktop GUI components (tkinter)
 │   │   ├── main_window.py
 │   │   └── ...
+│   ├── web/                     # Web interface (Flask)
+│   │   ├── app.py               # Flask application & API endpoints
+│   │   ├── models.py            # Pydantic models for API
+│   │   ├── sse_manager.py       # Server-Sent Events manager
+│   │   └── static/              # Frontend assets
+│   │       ├── index.html       # Main HTML template
+│   │       ├── styles.css       # CSS styles
+│   │       ├── app.js           # Main JavaScript application
+│   │       └── spreadsheet.js   # ag-Grid spreadsheet component
 │   ├── excel/                   # Excel processing
 │   │   ├── loader.py
 │   │   ├── processor.py
@@ -284,9 +329,11 @@ QuestionnaireAgent_v3/
 │   ├── utils/                   # Shared utilities
 │   │   ├── __init__.py
 │   │   ├── logger.py
+│   │   └── azure_auth.py        # Azure authentication
 │   ├── resource_manager.py      # Azure AI Foundry resource management
 │   └── web_search.py
 ├── tests/                       # Test suite
+├── specs/                       # Feature specifications
 ├── requirements.txt             # Python dependencies
 ├── setup.py                     # Installation script
 ├── README.md                    # This documentation

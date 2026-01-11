@@ -11,6 +11,12 @@ This document clarifies how the web interface should work, superseding any confl
 
 The interface should match the desktop GUI layout from `live_excel_output.png`:
 
+### Header
+- **Title**: "Questionnaire Agent - Microsoft Agent Framework"
+- **Logo**: Azure AI Foundry logo (transparent PNG from https://devblogs.microsoft.com/foundry/wp-content/uploads/sites/89/2025/03/ai-foundry.png)
+- **Azure Status**: Shows connection status indicator (green = connected, red = disconnected)
+- Logo should appear to the left of the title text
+
 ### Left Sidebar
 - **Context** input field (default: "Microsoft Azure AI")
 - **Character Limit** input field (default: 2000)
@@ -181,9 +187,20 @@ Each session maintains:
 
 ### Grid Styling
 - Header row: Blue background (`#0078D4`), white text
-- Completed rows: White background, normal text
-- Processing row: Pink/light red background (`#FFECEC`), "Working..." indicator with spinner
+- Waiting rows: White background, normal text (before any processing begins)
+- Processing row: Pink/light red background (`#FFECEC`), agent name indicator with spinner (e.g., "Answering Question...", "Checking Links...", "Checking Answer...")
+- Completed rows: Light green background (`#E6F4EA`) - turns green when answer is received
 - Error rows: Light red background with error text in Response cell
+
+### Processing Constraints
+- Maximum of 3 rows should show "Working..." at any time (matching the 3 parallel agent sets)
+- When a row receives an answer, it immediately turns light green
+- A row should only show the working indicator when an agent is actively working on it
+- Rows should never be green while still processing - only turn green when answer is received
+
+### Spreadsheet Grid
+- No row number column (removed as unnecessary)
+- Question and Response columns only
 
 ### Status Bar
 - Fixed to bottom of window
