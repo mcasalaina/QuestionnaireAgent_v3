@@ -189,6 +189,42 @@ class SSEManager:
             {"status": status, "job_id": job_id}
         )
 
+    async def send_row_started(self, session_id: str, row: int, total: int) -> bool:
+        """Send a row started event when processing begins on a row.
+
+        Args:
+            session_id: The session UUID
+            row: Row index (0-based) that is starting
+            total: Total number of rows to process
+
+        Returns:
+            True if event was sent
+        """
+        return await self.send_event(
+            session_id,
+            SSEMessageType.ROW_STARTED,
+            {"row": row, "total": total}
+        )
+
+    async def send_agent_progress(self, session_id: str, row: int, agent_name: str,
+                                   message: str = "") -> bool:
+        """Send an agent progress event when agent changes within a row.
+
+        Args:
+            session_id: The session UUID
+            row: Row index (0-based) being processed
+            agent_name: Name of the agent currently processing (e.g., "QuestionAnswerer")
+            message: Optional progress message
+
+        Returns:
+            True if event was sent
+        """
+        return await self.send_event(
+            session_id,
+            SSEMessageType.AGENT_PROGRESS,
+            {"row": row, "agent_name": agent_name, "message": message}
+        )
+
     async def stream_events(self, session_id: str) -> AsyncGenerator[str, None]:
         """Async generator that yields SSE-formatted events.
 

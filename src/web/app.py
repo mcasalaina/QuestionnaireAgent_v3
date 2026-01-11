@@ -539,7 +539,15 @@ async def start_processing(request: ProcessingStartRequest, background_tasks: Ba
     if start_row >= total_rows:
         raise HTTPException(status_code=422, detail="start_row exceeds available rows")
 
-    rows_to_process = min(end_row, total_rows) - start_row
+    # Count actual non-empty questions in the range
+    actual_end = min(end_row, total_rows)
+    rows_to_process = sum(
+        1 for idx in range(start_row, actual_end)
+        if target_sheet.questions[idx] and target_sheet.questions[idx].strip()
+    )
+
+    if rows_to_process == 0:
+        raise HTTPException(status_code=422, detail="No questions found in the selected range")
 
     # Create processing job
     job = ProcessingJob(
@@ -581,7 +589,7 @@ async def _process_spreadsheet(
     start_row: int,
     end_row: int
 ):
-    """Background task for spreadsheet processing."""
+    """Background task for spreadsheet processing with 3 parallel agent sets."""
     start_time = time.time()
 
     try:
@@ -603,88 +611,203 @@ async def _process_spreadsheet(
         default_context = session.config.context
         char_limit = session.config.char_limit
 
-        # Get Azure client and project client, then create coordinator
+        # Calculate actual number of non-empty questions in range
+        actual_end = min(end_row, len(sheet.questions))
+
+        # Build list of (row_idx, question_text) for non-empty questions
+        questions_to_process = [
+            (idx, sheet.questions[idx])
+            for idx in range(start_row, actual_end)
+            if sheet.questions[idx] and sheet.questions[idx].strip()
+        ]
+        total_questions = len(questions_to_process)
+
+        if total_questions == 0:
+            logger.warning("No questions to process")
+            session_manager.update_job_status(session_id, JobStatus.COMPLETED)
+            await sse_manager.send_complete(session_id, 0, 0.0)
+            return
+
+        # Shared state for parallel processing (thread-safe with asyncio.Lock)
+        state_lock = asyncio.Lock()
+        completed_rows = 0
+        cancelled = False
+
+        # Get Azure client and project client
         async with foundry_agent_session() as azure_client:
             project_client = await get_project_client()
-            coordinator = await create_agent_coordinator(
-                azure_client=azure_client,
-                bing_connection_id=config_manager.get_bing_connection_id(),
-                browser_automation_connection_id=config_manager.get_browser_automation_connection_id(),
-                project_client=project_client
-            )
 
-            # Process rows
-            for idx in range(start_row, min(end_row, len(sheet.questions))):
-                # Check if cancelled
-                current_job = session_manager.get_processing_job(session_id)
-                if not current_job or current_job.status in (JobStatus.CANCELLED, JobStatus.ERROR):
-                    break
+            # Create 3 agent coordinators for parallel processing
+            NUM_AGENT_SETS = 3
+            coordinators = []
+            for i in range(NUM_AGENT_SETS):
+                coordinator = await create_agent_coordinator(
+                    azure_client=azure_client,
+                    bing_connection_id=config_manager.get_bing_connection_id(),
+                    browser_automation_connection_id=config_manager.get_browser_automation_connection_id(),
+                    project_client=project_client
+                )
+                coordinators.append(coordinator)
+                logger.info(f"Created agent coordinator {i + 1}/{NUM_AGENT_SETS}")
 
-                question_text = sheet.questions[idx]
-                if not question_text or not question_text.strip():
-                    continue
+            # Create work queue
+            work_queue = asyncio.Queue()
+            for item in questions_to_process:
+                await work_queue.put(item)
 
-                # Update current row
-                session_manager.update_job_progress(session_id, job.processed_rows, idx)
+            async def worker(agent_set_id: int, coordinator):
+                """Worker for a single agent set."""
+                nonlocal completed_rows, cancelled
+                worker_processed = 0
+                worker_failed = 0
 
-                # Send progress via SSE
-                await sse_manager.send_progress(session_id, idx - start_row + 1, end_row - start_row)
+                logger.info(f"Agent Set {agent_set_id} starting")
 
+                while not cancelled:
+                    # Check if job was cancelled
+                    current_job = session_manager.get_processing_job(session_id)
+                    if not current_job or current_job.status in (JobStatus.CANCELLED, JobStatus.ERROR):
+                        cancelled = True
+                        break
+
+                    try:
+                        # Get next question from queue (with timeout)
+                        try:
+                            row_idx, question_text = await asyncio.wait_for(
+                                work_queue.get(),
+                                timeout=0.1
+                            )
+                        except asyncio.TimeoutError:
+                            # No more work available
+                            break
+
+                        logger.info(f"Agent Set {agent_set_id} processing row {row_idx}")
+
+                        # Send ROW_STARTED event
+                        await sse_manager.send_row_started(session_id, row_idx, total_questions)
+
+                        try:
+                            # Create question and process
+                            question = Question(
+                                text=question_text,
+                                context=default_context,
+                                char_limit=char_limit
+                            )
+
+                            reasoning_parts = []
+                            last_agent = [None]  # Use list to allow modification in nested function
+
+                            async def send_agent_progress_safe(sid, row, agent, msg):
+                                """Safe wrapper to send agent progress with error handling."""
+                                try:
+                                    result = await sse_manager.send_agent_progress(sid, row, agent, msg)
+                                    logger.debug(f"AGENT_PROGRESS sent for row {row}, agent={agent}, result={result}")
+                                except Exception as e:
+                                    logger.error(f"Failed to send AGENT_PROGRESS: {e}")
+
+                            def progress_callback(agent: str, message: str, progress: float):
+                                logger.info(f"[Set {agent_set_id}][Row {row_idx}][{agent}] {message}")
+                                # Send agent progress SSE event if agent changed
+                                if agent != last_agent[0] and agent not in ("workflow", "batch"):
+                                    last_agent[0] = agent
+                                    logger.info(f"Sending AGENT_PROGRESS SSE for row {row_idx}, agent={agent}")
+                                    # Schedule async SSE send
+                                    asyncio.create_task(
+                                        send_agent_progress_safe(session_id, row_idx, agent, message)
+                                    )
+
+                            def reasoning_callback(text: str):
+                                reasoning_parts.append(text)
+
+                            result = await coordinator.process_question(
+                                question,
+                                progress_callback=progress_callback,
+                                reasoning_callback=reasoning_callback
+                            )
+
+                            # Get answer
+                            answer = result.answer.content if result.answer else "Error generating answer"
+
+                            # Update sheet data (thread-safe)
+                            async with state_lock:
+                                if hasattr(sheet, 'mark_completed'):
+                                    sheet.mark_completed(row_idx, answer)
+                                else:
+                                    sheet.answers[row_idx] = answer
+
+                                # Increment completed rows
+                                completed_rows += 1
+                                current_completed = completed_rows
+
+                                # Update job progress
+                                session_manager.update_job_progress(session_id, current_completed, row_idx + 1)
+                                job.processed_rows = current_completed
+
+                            # Send answer via SSE
+                            await sse_manager.send_answer(
+                                session_id,
+                                row_idx,
+                                question_text,
+                                answer,
+                                _format_reasoning(result, reasoning_parts)
+                            )
+
+                            # Send progress update
+                            await sse_manager.send_progress(session_id, current_completed, total_questions)
+
+                            worker_processed += 1
+                            logger.info(f"Agent Set {agent_set_id} completed row {row_idx}")
+
+                        except Exception as e:
+                            logger.error(f"Agent Set {agent_set_id} error on row {row_idx}: {e}")
+                            await sse_manager.send_error(session_id, str(e), row_idx)
+
+                            # Still count as processed (with error)
+                            async with state_lock:
+                                completed_rows += 1
+                                current_completed = completed_rows
+                                session_manager.update_job_progress(session_id, current_completed, row_idx + 1)
+                                job.processed_rows = current_completed
+
+                            await sse_manager.send_progress(session_id, current_completed, total_questions)
+                            worker_failed += 1
+
+                    except Exception as e:
+                        logger.error(f"Agent Set {agent_set_id} worker error: {e}", exc_info=True)
+                        break
+
+                logger.info(f"Agent Set {agent_set_id} finished: {worker_processed} processed, {worker_failed} failed")
+                return worker_processed, worker_failed
+
+            # Run workers in parallel
+            worker_tasks = [
+                asyncio.create_task(worker(i + 1, coordinators[i]))
+                for i in range(NUM_AGENT_SETS)
+            ]
+
+            # Wait for all workers to complete
+            results = await asyncio.gather(*worker_tasks, return_exceptions=True)
+
+            # Log results
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"Agent Set {i + 1} failed with exception: {result}")
+                else:
+                    processed, failed = result
+                    logger.info(f"Agent Set {i + 1} result: {processed} processed, {failed} failed")
+
+            # Cleanup all coordinators
+            for i, coordinator in enumerate(coordinators):
                 try:
-                    # Create question and process
-                    question = Question(
-                        text=question_text,
-                        context=default_context,
-                        char_limit=char_limit
-                    )
-
-                    reasoning_parts = []
-
-                    def progress_callback(agent: str, message: str, progress: float):
-                        logger.info(f"[Row {idx}][{agent}] {message}")
-
-                    def reasoning_callback(text: str):
-                        reasoning_parts.append(text)
-
-                    result = await coordinator.process_question(
-                        question,
-                        progress_callback=progress_callback,
-                        reasoning_callback=reasoning_callback
-                    )
-
-                    # Get answer
-                    answer = result.answer.content if result.answer else "Error generating answer"
-
-                    # Update sheet data
-                    if hasattr(sheet, 'mark_completed'):
-                        sheet.mark_completed(idx, answer)
-                    else:
-                        sheet.answers[idx] = answer
-
-                    # Send answer via SSE
-                    await sse_manager.send_answer(
-                        session_id,
-                        idx,
-                        question_text,
-                        answer,
-                        _format_reasoning(result, reasoning_parts)
-                    )
-
-                    # Update progress
-                    session_manager.update_job_progress(session_id, job.processed_rows + 1, idx + 1)
-                    job.processed_rows += 1
-
+                    await coordinator.cleanup_agents()
+                    logger.info(f"Cleaned up coordinator {i + 1}")
                 except Exception as e:
-                    logger.error(f"Error processing row {idx}: {e}")
-                    await sse_manager.send_error(session_id, str(e), idx)
-
-            # Cleanup coordinator
-            await coordinator.cleanup_agents()
+                    logger.error(f"Error cleaning up coordinator {i + 1}: {e}")
 
         # Mark complete
         duration = time.time() - start_time
         session_manager.update_job_status(session_id, JobStatus.COMPLETED)
-        await sse_manager.send_complete(session_id, job.processed_rows, duration)
+        await sse_manager.send_complete(session_id, completed_rows, duration)
 
     except Exception as e:
         logger.error(f"Spreadsheet processing error: {e}", exc_info=True)

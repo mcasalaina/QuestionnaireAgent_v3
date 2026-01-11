@@ -274,35 +274,110 @@ Based on these clarifications, the following changes are needed to the current i
 3. Updated `LinkCheckerExecutor` to receive `project_client` directly instead of trying to extract it from `azure_client`
 4. Updated both call sites in `src/web/app.py` to get and pass `project_client`
 
-### ❌ New Issues (Identified During Testing)
+### ✅ Fixed Issues (2026-01-11)
 
-#### Issue: Row Count Shows Retries Instead of Actual Rows
+#### Issue: Row Count Shows Retries Instead of Actual Rows - FIXED
 **Observed**: Status bar shows "Complete. Processed 10 rows." when the spreadsheet only has 5 questions.
 
-**Root Cause**: The counter is incrementing for each agent iteration/retry attempt rather than counting actual spreadsheet rows completed.
+**Root Cause**: The counter was incrementing for each agent iteration/retry attempt rather than counting actual spreadsheet rows completed.
 
-**Expected Behavior**:
-- Status should show "Processing row X of Y" where Y is the actual number of rows in the spreadsheet
-- "Complete. Processed X rows." should show the actual number of rows, not retry attempts
-- A row should only be counted as "processed" when all agent iterations are complete (success or final failure)
+**Fix Applied**:
+1. Updated `start_processing` endpoint to count only non-empty questions when creating the job
+2. Updated `_process_spreadsheet()` to track `completed_rows` separately from loop iteration
+3. Added `ROW_STARTED` SSE event type to properly signal when a row begins processing
+4. Progress updates now sent AFTER row completion, not before
+5. Total questions calculated by counting non-empty rows only
 
-**Affected Files**:
-- `src/web/app.py` - `_process_spreadsheet()` function row counting logic
+**Files Changed**:
+- `src/web/app.py` - Fixed row counting logic in `start_processing` and `_process_spreadsheet()`
+- `src/web/models.py` - Added `ROW_STARTED` to `SSEMessageType` enum
+- `src/web/sse_manager.py` - Added `send_row_started()` method
 
-#### Issue: Sequential Processing Instead of Parallel (3 Agent Sets)
+#### Issue: Sequential Processing Instead of Parallel (3 Agent Sets) - FIXED
 **Observed**: The web interface processes questions one at a time (sequentially), but the Python desktop GUI uses 3 parallel agent sets working on 3 cells simultaneously.
 
-**Reference**: This was already working in the Python frontend (Issue #54 - fixed). The web backend should reuse the `ParallelExcelProcessor` class from `src/excel/processor.py`.
+**Fix Applied**:
+1. Updated `_process_spreadsheet()` to create 3 agent coordinators instead of 1
+2. Implemented parallel worker pattern using `asyncio.Queue` for work distribution
+3. Each worker processes questions independently with its own coordinator
+4. Thread-safe state updates using `asyncio.Lock`
+5. SSE events sent for each row start/complete from any worker
+
+**Files Changed**:
+- `src/web/app.py` - Rewrote `_process_spreadsheet()` to use parallel processing with 3 agent sets
+
+### ❌ New Issues (Identified 2026-01-11)
+
+#### Issue #35: No Sheet Tabs for Multi-Sheet Workbooks - FIXED
+**Observed**: When uploading a multi-sheet spreadsheet (e.g., `multi_sheet_3x10_questions.xlsx` with 3 sheets), there are no tabs to switch between sheets. Only the first sheet is displayed.
+
+**Fix Applied**:
+1. Added sheet tab bar container to `index.html` below the spreadsheet grid
+2. Added CSS styling for sheet tabs in `styles.css` (Excel-like tabs with active state highlighting)
+3. Added `generateSheetTabs()` and `switchSheet()` functions in `app.js`
+4. Tabs are generated when file is uploaded with sheet names
+5. Clicking a tab switches the grid to that sheet's data
+6. Active tab is highlighted in blue
+7. Sheet switching is disabled during processing to prevent data corruption
+
+**Files Changed**:
+- `src/web/static/index.html` - Added sheet-tabs container
+- `src/web/static/styles.css` - Added sheet tab styling
+- `src/web/static/app.js` - Added tab generation and switching functions
+
+#### Issue: More Than 3 Rows Showing "Working..." Simultaneously
+**Observed**: Screenshot shows rows 0, 1, 2, and 3 ALL showing "Working..." when only 3 agent sets should be active at any time.
+
+**Root Cause**: When a row completes processing and an ANSWER event is sent, the UI isn't properly clearing the "Working..." indicator for that row before showing "Working..." for the next row. The `updateGridCell` function should clear `_processing = false`, but either:
+1. The ANSWER SSE events aren't being received/processed correctly
+2. There's a race condition where ROW_STARTED for new rows arrives before ANSWER is processed for completed rows
+
+**Expected Behavior**:
+- Maximum of 3 rows should show "Working..." at any time (matching 3 agent sets)
+- When a row receives an answer, "Working..." should immediately be replaced with the answer
+- The next row should only show "Working..." after a previous one completes
+
+**Required Investigation**:
+- Check browser console for SSE message ordering
+- Verify ANSWER events are being sent and received
+- May need to track which rows are actively being processed and clear old ones
+
+#### Issue #58: Working Indicator Should Show Agent Name - FIXED
+**Observed**: When a cell is being processed, it shows "Working..." but doesn't indicate which agent is currently working on it.
+
+**Expected Behavior**:
+- Instead of just "Working...", show the agent name: "QuestionAnswerer...", "LinkChecker...", "AnswerChecker..."
+- This helps users understand what stage of processing each cell is in
+- The agent name should update as the cell progresses through different agents
+
+**Fix Applied**:
+1. Added `AGENT_PROGRESS` SSE message type to `models.py`
+2. Added `send_agent_progress()` method to `sse_manager.py`
+3. Updated `progress_callback` in `app.py` to send AGENT_PROGRESS SSE events when agent changes
+4. Added `updateRowAgent()` and `formatAgentName()` functions to `spreadsheet.js`
+5. Updated cell renderer to display agent name instead of just "Working..."
+6. Added `_agentName` field to grid data
+
+**Files Changed**:
+- `src/web/models.py` - Added AGENT_PROGRESS enum value
+- `src/web/sse_manager.py` - Added send_agent_progress() method
+- `src/web/app.py` - Updated progress_callback to send agent progress SSE events
+- `src/web/static/spreadsheet.js` - Added updateRowAgent(), formatAgentName(), and updated cell renderer
+- `src/web/static/app.js` - Added handleAgentProgress() handler
+
+#### Issue: Session ID Display Should Show Azure Login Status
+**Observed**: The header shows "Session: [UUID]" which is not useful information for users.
+
+**Expected Behavior**:
+- Instead of showing a session UUID, show whether the user is logged in to Azure
+- Display format: "Azure: Connected" (green) or "Azure: Not Connected" (red)
+- This helps users understand if they're authenticated and ready to process questions
 
 **Required Changes**:
-1. Create 3 agent coordinators instead of 1 in `_process_spreadsheet()`
-2. Use `ParallelExcelProcessor` instead of sequential loop
-3. Update SSE events to show 3 "Working..." indicators simultaneously
-4. The UI already supports multiple highlighted rows (CSS is ready)
-
-**Affected Files**:
-- `src/web/app.py` - `_process_spreadsheet()` function needs to use `ParallelExcelProcessor`
-- `src/web/static/app.js` - May need updates for multiple concurrent "Working..." indicators
+- Update `index.html` header to show login status instead of session ID
+- Add backend endpoint to check Azure authentication status
+- Update `app.js` to fetch and display Azure login status on page load
+- Add visual indicator (green/red icon) for connection state
 
 ### 🔄 Not Yet Tested
 - Stop processing functionality

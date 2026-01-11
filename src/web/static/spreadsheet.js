@@ -54,7 +54,10 @@ function initializeSpreadsheetGrid() {
             cellRenderer: (params) => {
                 // Check if this is the answer column and row is processing
                 if (col === answerColumnField && params.data._processing) {
-                    return `<span class="working-indicator"><span class="mini-spinner"></span>Working...</span>`;
+                    const agentName = params.data._agentName || 'Working';
+                    // Format agent name for display (e.g., "question_answerer" -> "QuestionAnswerer")
+                    const displayName = formatAgentName(agentName);
+                    return `<span class="working-indicator"><span class="mini-spinner"></span>${displayName}...</span>`;
                 }
                 // Make answer cells clickable to show reasoning
                 if (col === answerColumnField && params.value) {
@@ -81,13 +84,14 @@ function initializeSpreadsheetGrid() {
             ...row,
             rowIndex: idx,
             _processing: false,
-            _error: null
+            _error: null,
+            _agentName: null
         }));
     } else {
         // Fallback: create placeholder rows if no data available
         gridData = [];
         for (let i = 0; i < (uploadedData.row_count || 10); i++) {
-            const row = { rowIndex: i, _processing: false, _error: null };
+            const row = { rowIndex: i, _processing: false, _error: null, _agentName: null };
             columns.forEach(col => {
                 row[col] = '';
             });
@@ -163,6 +167,10 @@ function setRowProcessing(rowIndex, processing) {
     // Update data
     gridData[rowIndex]._processing = processing;
     gridData[rowIndex]._error = null;
+    // Clear agent name when not processing
+    if (!processing) {
+        gridData[rowIndex]._agentName = null;
+    }
 
     // Track current processing row
     currentProcessingRow = processing ? rowIndex : null;
@@ -209,6 +217,47 @@ function highlightProcessingRow(rowIndex) {
     setRowProcessing(rowIndex, true);
 }
 
+function updateRowAgent(rowIndex, agentName) {
+    if (!gridApi || rowIndex >= gridData.length) return;
+
+    // Only update if row is currently processing
+    if (!gridData[rowIndex]._processing) return;
+
+    // Update agent name
+    gridData[rowIndex]._agentName = agentName;
+
+    // Refresh the row
+    const rowNode = gridApi.getRowNode(rowIndex.toString());
+    if (rowNode) {
+        rowNode.setData(gridData[rowIndex]);
+        gridApi.refreshCells({ rowNodes: [rowNode], force: true });
+    }
+}
+
+function formatAgentName(agentName) {
+    if (!agentName) return 'Working';
+
+    // Map internal agent names to human-readable display names
+    const agentDisplayNames = {
+        'question_answerer': 'Answering Question',
+        'QuestionAnswererExecutor': 'Answering Question',
+        'answer_checker': 'Checking Answer',
+        'AnswerCheckerExecutor': 'Checking Answer',
+        'link_checker': 'Checking Links',
+        'LinkCheckerExecutor': 'Checking Links',
+        'workflow': 'Processing',
+        'batch': 'Processing'
+    };
+
+    // Check for exact match first
+    if (agentDisplayNames[agentName]) {
+        return agentDisplayNames[agentName];
+    }
+
+    // Fallback: return as-is
+    return 'Working';
+}
+
 // ============================================================================
 // Grid Updates
 // ============================================================================
@@ -219,6 +268,7 @@ function updateGridCell(rowIndex, answer) {
     // Clear processing state
     gridData[rowIndex]._processing = false;
     gridData[rowIndex]._error = null;
+    gridData[rowIndex]._agentName = null;
 
     // Update the answer in data
     if (answerColumnField) {

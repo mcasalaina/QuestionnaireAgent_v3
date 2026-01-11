@@ -317,6 +317,9 @@ function handleSSEMessage(message) {
         case 'ROW_STARTED':
             handleRowStarted(message.data);
             break;
+        case 'AGENT_PROGRESS':
+            handleAgentProgress(message.data);
+            break;
         default:
             console.log('Unknown SSE message type:', message.type);
     }
@@ -368,11 +371,14 @@ function handleUploadSuccess(data) {
     // Switch to spreadsheet mode
     switchMode('spreadsheet');
 
-    // Populate sheet selector
+    // Populate sheet selector (hidden dropdown, used internally)
     const sheetSelect = document.getElementById('sheet-select');
     sheetSelect.innerHTML = data.sheets.map(sheet =>
         `<option value="${sheet}"${sheet === data.suggested_columns.sheet_name ? ' selected' : ''}>${sheet}</option>`
     ).join('');
+
+    // Generate sheet tabs at bottom of spreadsheet
+    generateSheetTabs(data.sheets, data.suggested_columns.sheet_name);
 
     // Populate column selectors for the selected sheet
     updateColumnSelectors(data.suggested_columns.sheet_name);
@@ -418,6 +424,61 @@ function handleUploadSuccess(data) {
 
         updateStatusBar('Could not auto-detect columns. Please select manually.');
     }
+}
+
+// ============================================================================
+// Sheet Tabs
+// ============================================================================
+
+function generateSheetTabs(sheets, activeSheet) {
+    const tabsContainer = document.getElementById('sheet-tabs');
+    if (!tabsContainer) return;
+
+    tabsContainer.innerHTML = sheets.map(sheet => `
+        <div class="sheet-tab${sheet === activeSheet ? ' active' : ''}"
+             data-sheet="${sheet}"
+             onclick="switchSheet('${sheet}')">
+            <span class="sheet-tab-icon">📄</span>
+            ${sheet}
+        </div>
+    `).join('');
+}
+
+function switchSheet(sheetName) {
+    // Don't switch if processing is active
+    if (isProcessing) {
+        showError('Cannot switch sheets while processing is active');
+        return;
+    }
+
+    // Update hidden sheet selector
+    const sheetSelect = document.getElementById('sheet-select');
+    if (sheetSelect) {
+        sheetSelect.value = sheetName;
+    }
+
+    // Update tab active states
+    const tabs = document.querySelectorAll('.sheet-tab');
+    tabs.forEach(tab => {
+        if (tab.dataset.sheet === sheetName) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+
+    // Update column selectors for new sheet
+    updateColumnSelectors(sheetName);
+
+    // Re-initialize grid with new sheet data
+    if (typeof initializeSpreadsheetGrid === 'function') {
+        initializeSpreadsheetGrid();
+    }
+
+    // Clear any stored reasoning data for previous sheet
+    Object.keys(rowReasoningData).forEach(key => delete rowReasoningData[key]);
+
+    updateStatusBar(`Switched to sheet: ${sheetName}`);
 }
 
 function handleSheetChange() {
@@ -543,6 +604,13 @@ function handleRowStarted(data) {
     // Highlight current row with "Working..." indicator
     if (typeof setRowProcessing === 'function') {
         setRowProcessing(data.row, true);
+    }
+}
+
+function handleAgentProgress(data) {
+    // Update the agent name for a row being processed
+    if (typeof updateRowAgent === 'function') {
+        updateRowAgent(data.row, data.agent_name);
     }
 }
 

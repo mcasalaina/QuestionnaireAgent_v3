@@ -591,12 +591,83 @@ body {
    Spreadsheet Grid
    ============================================================================ */
 
-.spreadsheet-grid {
+.spreadsheet-container {
+    display: flex;
+    flex-direction: column;
     flex: 1;
     min-height: 400px;
+}
+
+.spreadsheet-grid {
+    flex: 1;
+    min-height: 350px;
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
+    border-top-left-radius: var(--radius-md);
+    border-top-right-radius: var(--radius-md);
+    border-bottom: none;
     overflow: hidden;
+}
+
+/* Sheet Tabs (Excel-style tabs at bottom - hanging down from spreadsheet) */
+.sheet-tabs {
+    display: flex;
+    align-items: flex-start;
+    background-color: #E0E0E0;
+    border-left: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    border-bottom-left-radius: var(--radius-md);
+    border-bottom-right-radius: var(--radius-md);
+    padding: 0 var(--spacing-sm);
+    padding-bottom: 4px;
+    gap: 2px;
+    overflow-x: auto;
+    min-height: 32px;
+}
+
+.sheet-tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    background: linear-gradient(to top, #F8F8F8 0%, #E8E8E8 100%);
+    border: 1px solid #B0B0B0;
+    border-top: none;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--transition-fast);
+    position: relative;
+    margin-top: -1px;
+}
+
+.sheet-tab:hover {
+    background: linear-gradient(to top, #FFFFFF 0%, #F0F0F0 100%);
+}
+
+.sheet-tab.active {
+    background: #FFFFFF;
+    border-color: var(--color-border);
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
+    z-index: 1;
+}
+
+.sheet-tab.active::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #FFFFFF;
+}
+
+.sheet-tab-icon {
+    margin-right: var(--spacing-xs);
+    font-size: var(--font-size-xs);
 }
 
 /* ag-Grid theme overrides */

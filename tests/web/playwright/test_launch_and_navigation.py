@@ -94,53 +94,23 @@ class TestSessionManagement:
         context1.close()
 
 
-class TestTabNavigation:
-    """Tests for tab navigation between Question and Spreadsheet modes."""
+class TestModeDisplay:
+    """Tests for mode switching between Question and Spreadsheet modes."""
 
-    def test_question_tab_active_by_default(self, page: Page):
-        """Question tab should be active by default."""
-        question_btn = page.locator('.tab-btn[data-tab="question-tab"]')
-        expect(question_btn).to_have_class(/active/)
+    def test_question_mode_visible_by_default(self, page: Page):
+        """Question mode should be visible by default."""
+        question_mode = page.locator("#question-mode")
+        expect(question_mode).to_be_visible()
 
-    def test_question_content_visible_by_default(self, page: Page):
-        """Question content should be visible by default."""
-        question_content = page.locator("#question-tab")
-        expect(question_content).to_be_visible()
+    def test_spreadsheet_mode_hidden_by_default(self, page: Page):
+        """Spreadsheet mode should be hidden by default."""
+        spreadsheet_mode = page.locator("#spreadsheet-mode")
+        expect(spreadsheet_mode).to_be_hidden()
 
-    def test_spreadsheet_content_hidden_by_default(self, page: Page):
-        """Spreadsheet content should be hidden by default."""
-        spreadsheet_content = page.locator("#spreadsheet-tab")
-        expect(spreadsheet_content).to_be_hidden()
-
-    def test_clicking_spreadsheet_tab_switches_view(self, page: Page):
-        """Clicking spreadsheet tab should switch to spreadsheet view."""
-        spreadsheet_btn = page.locator('.tab-btn[data-tab="spreadsheet-tab"]')
-        spreadsheet_btn.click()
-
-        # Spreadsheet tab should now be active
-        expect(spreadsheet_btn).to_have_class(/active/)
-
-        # Spreadsheet content should be visible
-        spreadsheet_content = page.locator("#spreadsheet-tab")
-        expect(spreadsheet_content).to_be_visible()
-
-        # Question content should be hidden
-        question_content = page.locator("#question-tab")
-        expect(question_content).to_be_hidden()
-
-    def test_can_switch_back_to_question_tab(self, page: Page):
-        """Should be able to switch back to question tab."""
-        # Switch to spreadsheet
-        spreadsheet_btn = page.locator('.tab-btn[data-tab="spreadsheet-tab"]')
-        spreadsheet_btn.click()
-
-        # Switch back to question
-        question_btn = page.locator('.tab-btn[data-tab="question-tab"]')
-        question_btn.click()
-
-        expect(question_btn).to_have_class(/active/)
-        question_content = page.locator("#question-tab")
-        expect(question_content).to_be_visible()
+    def test_status_bar_shows_ready(self, page: Page):
+        """Status bar should show 'Ready' on initial load."""
+        status_text = page.locator("#status-text")
+        expect(status_text).to_have_text("Ready")
 
 
 class TestUIElements:
@@ -163,32 +133,54 @@ class TestUIElements:
         expect(char_limit).to_be_visible()
         expect(char_limit).to_have_value("2000")
 
-    def test_submit_button_exists(self, page: Page):
-        """Submit button should exist."""
-        submit_btn = page.locator("#submit-question-btn")
-        expect(submit_btn).to_be_visible()
-        expect(submit_btn).to_be_enabled()
+    def test_ask_button_exists(self, page: Page):
+        """Ask button should exist."""
+        ask_btn = page.locator("#ask-btn")
+        expect(ask_btn).to_be_visible()
+        expect(ask_btn).to_be_enabled()
+        expect(ask_btn).to_have_text("Ask!")
 
-    def test_file_upload_exists_in_spreadsheet_tab(self, page: Page):
-        """File upload should exist in spreadsheet tab."""
-        # Switch to spreadsheet tab
-        spreadsheet_btn = page.locator('.tab-btn[data-tab="spreadsheet-tab"]')
-        spreadsheet_btn.click()
+    def test_import_button_exists(self, page: Page):
+        """Import From Excel button should exist."""
+        import_btn = page.locator("#import-btn")
+        expect(import_btn).to_be_visible()
+        expect(import_btn).to_have_text("Import From Excel")
 
+    def test_file_upload_exists(self, page: Page):
+        """File upload input should exist (hidden)."""
         file_upload = page.locator("#file-upload")
         expect(file_upload).to_be_attached()
 
 
-class TestStatusIndicators:
-    """Tests for status indicator displays."""
+class TestStatusBar:
+    """Tests for status bar display."""
 
-    def test_connection_status_exists(self, page: Page):
-        """Connection status indicator should exist."""
-        status = page.locator("#connection-status")
-        expect(status).to_be_visible()
+    def test_status_bar_exists(self, page: Page):
+        """Status bar should exist at bottom of page."""
+        status_bar = page.locator(".status-bar")
+        expect(status_bar).to_be_visible()
 
-    def test_processing_status_exists(self, page: Page):
-        """Processing status indicator should exist."""
-        status = page.locator("#processing-status")
-        expect(status).to_be_visible()
-        expect(status).to_contain_text("Idle")
+    def test_connection_indicator_exists(self, page: Page):
+        """Connection indicator should exist."""
+        indicator = page.locator("#connection-indicator")
+        expect(indicator).to_be_visible()
+
+    def test_status_text_exists(self, page: Page):
+        """Status text should exist and show Ready."""
+        status_text = page.locator("#status-text")
+        expect(status_text).to_be_visible()
+        expect(status_text).to_have_text("Ready")
+
+
+class TestEmptyState:
+    """Tests for empty state display."""
+
+    def test_empty_state_shown_on_load(self, page: Page):
+        """Empty state message should be shown on initial load."""
+        empty_state = page.locator("#empty-state")
+        expect(empty_state).to_be_visible()
+
+    def test_answer_section_hidden_on_load(self, page: Page):
+        """Answer section should be hidden on initial load."""
+        answer_section = page.locator("#answer-section")
+        expect(answer_section).to_be_hidden()

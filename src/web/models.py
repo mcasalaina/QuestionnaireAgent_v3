@@ -30,6 +30,8 @@ class SSEMessageType(str, Enum):
     ERROR = "ERROR"
     COMPLETE = "COMPLETE"
     STATUS = "STATUS"
+    ROW_STARTED = "ROW_STARTED"  # Sent when a row begins processing
+    AGENT_PROGRESS = "AGENT_PROGRESS"  # Sent when agent changes within a row
 
 
 # ============================================================================
