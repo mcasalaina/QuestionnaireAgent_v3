@@ -1305,39 +1305,45 @@ class UIManager:
     async def _create_agent_coordinator(self):
         """Create agent coordinator with proper initialization."""
         self.update_reasoning("Initializing Azure AI agents... (this may take 30-60 seconds)")
-        
+
         # Lazy import to avoid slow startup
-        from utils.azure_auth import get_azure_client
-        
+        from utils.azure_auth import get_azure_client, get_project_client
+
         azure_client = await get_azure_client()
+        project_client = await get_project_client()
         bing_connection_id = config_manager.get_bing_connection_id()
         browser_automation_connection_id = config_manager.get_browser_automation_connection_id()
-        
+
         from agents.workflow_manager import create_agent_coordinator
-        coordinator = await create_agent_coordinator(azure_client, bing_connection_id, 
-                                                     browser_automation_connection_id)
-        
+        coordinator = await create_agent_coordinator(
+            azure_client,
+            bing_connection_id,
+            browser_automation_connection_id,
+            project_client=project_client
+        )
+
         self.update_reasoning("Azure AI agents initialized successfully")
         return coordinator
     
     async def _create_spreadsheet_agent_coordinators(self):
         """Create 3 agent coordinators for parallel spreadsheet processing."""
         self.update_reasoning("Initializing 3 agent sets for parallel spreadsheet processing... (this may take 60-90 seconds)")
-        
+
         # Lazy import to avoid slow startup
-        from utils.azure_auth import get_azure_client
-        
+        from utils.azure_auth import get_azure_client, get_project_client
+
         azure_client = await get_azure_client()
+        project_client = await get_project_client()
         bing_connection_id = config_manager.get_bing_connection_id()
         browser_automation_connection_id = config_manager.get_browser_automation_connection_id()
-        
+
         from agents.workflow_manager import create_agent_coordinator
-        
+
         # Create 3 coordinators in parallel
         coordinators = await asyncio.gather(
-            create_agent_coordinator(azure_client, bing_connection_id, browser_automation_connection_id),
-            create_agent_coordinator(azure_client, bing_connection_id, browser_automation_connection_id),
-            create_agent_coordinator(azure_client, bing_connection_id, browser_automation_connection_id)
+            create_agent_coordinator(azure_client, bing_connection_id, browser_automation_connection_id, project_client=project_client),
+            create_agent_coordinator(azure_client, bing_connection_id, browser_automation_connection_id, project_client=project_client),
+            create_agent_coordinator(azure_client, bing_connection_id, browser_automation_connection_id, project_client=project_client)
         )
         
         self.update_reasoning(f"✅ All 3 agent sets initialized successfully")
