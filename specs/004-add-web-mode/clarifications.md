@@ -365,7 +365,7 @@ Based on these clarifications, the following changes are needed to the current i
 - `src/web/static/spreadsheet.js` - Added updateRowAgent(), formatAgentName(), and updated cell renderer
 - `src/web/static/app.js` - Added handleAgentProgress() handler
 
-#### Issue: Session ID Display Should Show Azure Login Status
+#### Issue: Session ID Display Should Show Azure Login Status - FIXED
 **Observed**: The header shows "Session: [UUID]" which is not useful information for users.
 
 **Expected Behavior**:
@@ -373,11 +373,17 @@ Based on these clarifications, the following changes are needed to the current i
 - Display format: "Azure: Connected" (green) or "Azure: Not Connected" (red)
 - This helps users understand if they're authenticated and ready to process questions
 
-**Required Changes**:
-- Update `index.html` header to show login status instead of session ID
-- Add backend endpoint to check Azure authentication status
-- Update `app.js` to fetch and display Azure login status on page load
-- Add visual indicator (green/red icon) for connection state
+**Fix Applied**:
+1. Updated `index.html` header to show Azure status indicator with colored dot
+2. Added CSS styles for status indicator (green=connected, red=disconnected, yellow=checking)
+3. Added `checkAzureStatus()` function in `app.js` to fetch `/health` endpoint on page load
+4. Added `updateAzureStatus()` function to update the visual indicator
+5. Removed session ID display code
+
+**Files Changed**:
+- `src/web/static/index.html` - Replaced session info with azure-status div
+- `src/web/static/styles.css` - Added azure-status and status-indicator styles
+- `src/web/static/app.js` - Added checkAzureStatus() and updateAzureStatus() functions
 
 ### 🔄 Not Yet Tested
 - Stop processing functionality

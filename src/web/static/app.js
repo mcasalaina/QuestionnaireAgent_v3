@@ -23,6 +23,9 @@ const AUTO_MAP_CONFIDENCE_THRESHOLD = 0.7;
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Check Azure status first
+    await checkAzureStatus();
+
     // Initialize session
     await initializeSession();
 
@@ -46,7 +49,6 @@ async function initializeSession() {
             const response = await fetch(`/api/session/${sessionId}`);
             if (response.ok) {
                 const data = await response.json();
-                updateSessionDisplay(sessionId);
                 applySessionConfig(data.config);
 
                 // Check for active processing job
@@ -67,7 +69,6 @@ async function initializeSession() {
             const data = await response.json();
             sessionId = data.session_id;
             localStorage.setItem('sessionId', sessionId);
-            updateSessionDisplay(sessionId);
             applySessionConfig(data.config);
         } else {
             showError('Failed to create session');
@@ -78,11 +79,40 @@ async function initializeSession() {
     }
 }
 
-function updateSessionDisplay(id) {
-    const sessionIdEl = document.getElementById('session-id');
-    if (sessionIdEl) {
-        sessionIdEl.textContent = id.substring(0, 8) + '...';
-        sessionIdEl.title = id;
+async function checkAzureStatus() {
+    try {
+        const response = await fetch('/health');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.azure_auth === 'authenticated') {
+                updateAzureStatus(true);
+            } else {
+                updateAzureStatus(false, data.message || 'Not authenticated');
+            }
+        } else {
+            updateAzureStatus(false, 'Server error');
+        }
+    } catch (e) {
+        console.error('Health check error:', e);
+        updateAzureStatus(false, 'Connection error');
+    }
+}
+
+function updateAzureStatus(connected, message = null) {
+    const indicator = document.getElementById('azure-status-indicator');
+    const label = document.getElementById('azure-status-text');
+
+    if (indicator) {
+        indicator.classList.remove('checking', 'connected', 'disconnected');
+        indicator.classList.add(connected ? 'connected' : 'disconnected');
+    }
+
+    if (label) {
+        if (connected) {
+            label.textContent = 'Azure: Connected';
+        } else {
+            label.textContent = message ? `Azure: ${message}` : 'Azure: Disconnected';
+        }
     }
 }
 
