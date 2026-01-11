@@ -599,6 +599,10 @@ async function stopProcessing() {
             const data = await response.json();
             isProcessing = false;
             setProcessingUI(false, 0);
+            // Clear all working cells - only completed (green) rows should remain
+            if (typeof clearAllWorkingCells === 'function') {
+                clearAllWorkingCells();
+            }
             updateStatusBar(`Stopped at row ${data.processed_rows} of ${data.total_rows}`);
             showSuccess(`Stopped processing. ${data.processed_rows} rows completed.`);
         } else {
@@ -688,6 +692,10 @@ function handleStatusChange(data) {
     if (data.status === 'CANCELLED') {
         isProcessing = false;
         setProcessingUI(false, 0);
+        // Clear all working cells - only completed (green) rows should remain
+        if (typeof clearAllWorkingCells === 'function') {
+            clearAllWorkingCells();
+        }
     }
 }
 

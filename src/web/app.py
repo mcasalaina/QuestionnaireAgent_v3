@@ -333,8 +333,8 @@ async def upload_spreadsheet(
             data[sheet.sheet_name] = _get_sheet_data(temp_path, sheet.sheet_name, sheet_columns)
             total_rows += len(data[sheet.sheet_name])
 
-        # Get suggestions from the first sheet (pass columns for header-based matching)
-        suggestions = _identify_columns(workbook_data, columns)
+        # Get suggestions from the first sheet using AI-based column identification
+        suggestions = await _identify_columns(workbook_data, columns)
 
         # Store in session
         session_manager.set_workbook(session_id, workbook_data, temp_path, columns)
@@ -418,8 +418,12 @@ def _get_sheet_data(file_path: str, sheet_name: str, columns: list) -> list:
     return rows
 
 
-def _identify_columns(workbook_data, columns: dict = None) -> ColumnSuggestions:
-    """Identify likely question/answer columns from workbook data with improved confidence scoring."""
+async def _identify_columns(workbook_data, columns: dict = None) -> ColumnSuggestions:
+    """Identify likely question/answer columns using Azure AI LLM.
+
+    Uses ChatAgent to ask the LLM to identify which columns contain questions,
+    responses, and documentation based on the column headers.
+    """
     if not workbook_data.sheets:
         return ColumnSuggestions(
             sheet_name="Sheet1",
@@ -436,10 +440,135 @@ def _identify_columns(workbook_data, columns: dict = None) -> ColumnSuggestions:
     # Get actual column names from headers if available
     sheet_columns = columns.get(sheet_name, []) if columns else []
 
-    # Question column patterns (high confidence)
-    question_patterns = ['question', 'query', 'ask', 'q']
-    # Answer/Response column patterns (high confidence)
-    answer_patterns = ['answer', 'response', 'reply', 'a']
+    if not sheet_columns:
+        return ColumnSuggestions(
+            sheet_name=sheet_name,
+            question_column=None,
+            context_column=None,
+            answer_column=None,
+            confidence=0.0,
+            auto_map_success=False
+        )
+
+    # Use Azure AI LLM for column identification
+    try:
+        from utils.azure_auth import get_azure_client
+        from agent_framework import ChatAgent
+        import json
+        import re
+
+        azure_client = await get_azure_client()
+
+        # Create a ChatAgent for column identification
+        agent = ChatAgent(
+            chat_client=azure_client,
+            name="Column Identifier",
+            instructions="""You are a column identification expert. Your job is to analyze spreadsheet column headers and identify which columns contain:
+1. Questions - the column with questions to be answered
+2. Responses/Answers - the column where answers should be written
+3. Documentation - the column for documentation links (optional)
+
+Always respond with valid JSON only. No other text."""
+        )
+
+        # Build the prompt
+        column_list = ', '.join([f'Column {i}: "{col}"' for i, col in enumerate(sheet_columns)])
+        prompt = f"""Analyze these spreadsheet column headers and identify which columns are for questions, responses, and documentation:
+
+{column_list}
+
+Respond ONLY with valid JSON in this exact format:
+{{"question": <column_index>, "response": <column_index>, "documentation": <column_index_or_null>}}
+
+Use 0-based column indices. If a column cannot be identified, use null.
+For example, if "Question" is column 3, "Response" is column 4, and "Documentation" is column 5:
+{{"question": 3, "response": 4, "documentation": 5}}"""
+
+        logger.info(f"Sending column identification request to Azure AI LLM with headers: {sheet_columns}")
+
+        # Call the LLM - pass prompt directly as string
+        response = await agent.run(prompt)
+
+        # Parse the response - use .text property
+        response_text = response.text if response else ""
+        logger.info(f"LLM column identification response: {response_text}")
+
+        # Extract JSON from response
+        json_match = re.search(r'\{[^}]+\}', response_text)
+        if json_match:
+            result = json.loads(json_match.group(0))
+            logger.info(f"Parsed column identification result: {result}")
+
+            # Convert indices to column names
+            question_col = sheet_columns[result['question']] if result.get('question') is not None and result['question'] < len(sheet_columns) else None
+            answer_col = sheet_columns[result['response']] if result.get('response') is not None and result['response'] < len(sheet_columns) else None
+            context_col = sheet_columns[result['documentation']] if result.get('documentation') is not None and result['documentation'] < len(sheet_columns) else None
+
+            # LLM identification has high confidence
+            confidence = 1.0 if question_col and answer_col else 0.5
+            auto_map_success = question_col is not None and answer_col is not None
+
+            logger.info(f"LLM identified columns - Question: {question_col}, Answer: {answer_col}, Documentation: {context_col}")
+
+            return ColumnSuggestions(
+                sheet_name=sheet_name,
+                question_column=question_col,
+                context_column=context_col,
+                answer_column=answer_col,
+                confidence=confidence,
+                auto_map_success=auto_map_success
+            )
+        else:
+            logger.warning(f"Could not parse JSON from LLM response: {response_text}")
+
+    except Exception as e:
+        logger.error(f"Azure AI LLM column identification failed: {e}", exc_info=True)
+
+    # Return failure - do NOT fall back to heuristics per user request
+    logger.warning("LLM column identification failed, returning no suggestions")
+    return ColumnSuggestions(
+        sheet_name=sheet_name,
+        question_column=None,
+        context_column=None,
+        answer_column=None,
+        confidence=0.0,
+        auto_map_success=False
+    )
+
+
+def _identify_columns_heuristic(workbook_data, columns: dict = None) -> ColumnSuggestions:
+    """Fallback heuristic-based column identification."""
+    if not workbook_data.sheets:
+        return ColumnSuggestions(
+            sheet_name="Sheet1",
+            question_column=None,
+            context_column=None,
+            answer_column=None,
+            confidence=0.0,
+            auto_map_success=False
+        )
+
+    sheet = workbook_data.sheets[0]
+    sheet_name = sheet.sheet_name
+
+    # Get actual column names from headers if available
+    sheet_columns = columns.get(sheet_name, []) if columns else []
+
+    # Question column patterns - ordered by priority (most specific first)
+    # Single-letter patterns only match exactly, not as substrings
+    question_patterns = [
+        ('question', False),  # (pattern, exact_only)
+        ('query', False),
+        ('ask', False),
+        ('q', True),  # 'q' only matches exact "q" column name
+    ]
+    # Answer/Response column patterns - ordered by priority
+    answer_patterns = [
+        ('response', False),
+        ('answer', False),
+        ('reply', False),
+        # Note: 'a' removed - too broad, matches "Status", "Data", etc.
+    ]
     # Documentation column patterns (optional)
     doc_patterns = ['documentation', 'docs', 'sources', 'references', 'links']
 
@@ -454,24 +583,24 @@ def _identify_columns(workbook_data, columns: dict = None) -> ColumnSuggestions:
 
         # Check for question column
         if not question_col:
-            for pattern in question_patterns:
+            for pattern, exact_only in question_patterns:
                 if col_lower == pattern:
                     question_col = col
                     question_confidence = 1.0  # Exact match
                     break
-                elif pattern in col_lower:
+                elif not exact_only and pattern in col_lower:
                     question_col = col
                     question_confidence = 0.8  # Partial match
                     break
 
         # Check for answer column
         if not answer_col:
-            for pattern in answer_patterns:
+            for pattern, exact_only in answer_patterns:
                 if col_lower == pattern:
                     answer_col = col
                     answer_confidence = 1.0  # Exact match
                     break
-                elif pattern in col_lower:
+                elif not exact_only and pattern in col_lower:
                     answer_col = col
                     answer_confidence = 0.8  # Partial match
                     break

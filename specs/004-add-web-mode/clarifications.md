@@ -109,8 +109,8 @@ Auto-mapping is **unsuccessful** if:
 - Process questions sequentially (row by row)
 - Status bar updates: "Processing row X of Y..."
 - Current row being processed is highlighted (pink/red background with "Working..." indicator)
-- Completed rows show their response text
-- Grid scrolls to keep the current row visible
+- Completed rows show their response text (light green background)
+- Grid does NOT auto-scroll - user controls scroll position (auto-scroll was disabled as it was jarring)
 
 ### Real-Time Updates (SSE)
 The following events are sent via Server-Sent Events:
@@ -235,7 +235,7 @@ Based on these clarifications, the following changes are needed to the current i
 ### spreadsheet.js
 - Add row highlighting during processing
 - Implement "Working..." indicator in active row
-- Auto-scroll to current row
+- Auto-scroll disabled (was jarring with parallel processing)
 
 ### app.py
 - Improve auto-mapping confidence scoring
@@ -434,3 +434,63 @@ python run_app.py --web --port 8080 --no-browser
 **Implementation:**
 - Add `--no-browser` argument to `run_app.py` argument parser
 - Only call `webbrowser.open()` when `--no-browser` is NOT set
+
+---
+
+## 12. Intelligent Column Identification
+
+### Problem with Simple Heuristics
+
+The original column identification used simple keyword matching (e.g., looking for "question", "response" in column names). This fails for spreadsheets with:
+- Non-standard column names (e.g., "Q#" for question number, not questions)
+- Multiple similar columns (e.g., "Status", "Owner", "Q#", "Question", "Response", "Documentation")
+- Ambiguous column names
+
+### LLM-Based Column Identification
+
+The web interface should use Azure AI to intelligently identify columns:
+
+1. **Use the `ColumnIdentifier` class** from `src/excel/column_identifier.py`
+2. **Pass the Azure client** to enable AI-based identification
+3. **Fall back to heuristics** only if AI is unavailable
+
+### Implementation Requirements
+
+**In `src/web/app.py`:**
+- Replace the inline `_identify_columns()` function with calls to `ColumnIdentifier`
+- Pass the Azure client (from `azure_auth.py`) to `ColumnIdentifier`
+- The AI prompt asks the LLM to analyze all column headers and return the indices for question, response, and documentation columns
+
+**Expected Behavior:**
+- For `sample_questionnaire_longer.xlsx` with columns `['Status', 'Owner', 'Q#', 'Question', 'Response', 'Documentation']`:
+  - Question column: "Question" (index 3)
+  - Response column: "Response" (index 4)
+  - Documentation column: "Documentation" (index 5)
+- For simple spreadsheets, heuristics still work as a fallback
+
+---
+
+## 13. UX Improvements
+
+### Disable Auto-Scroll During Processing
+
+**Problem:** When multiple rows are being processed in parallel, the spreadsheet would auto-scroll to follow each active row. This was jarring and disorienting as the view would jump around constantly.
+
+**Solution:** Auto-scroll is disabled. The user controls their own scroll position and can watch whichever rows they want during processing.
+
+**Implementation:**
+- Removed `gridApi.ensureIndexVisible()` call from `setRowProcessing()` in `spreadsheet.js`
+- The grid stays at whatever scroll position the user sets
+
+### Stop Processing Clears Working Indicators
+
+**Problem:** When the user clicks "Stop Processing", rows that were showing "Working..." or "Checking..." should be cleared and return to white background.
+
+**Solution:**
+- Added `clearAllWorkingCells()` function to `spreadsheet.js`
+- This function iterates through all rows, clears `_processing` state for non-completed rows
+- Uses `redrawRows()` to update row styling (background color)
+- Only completed (green) rows retain their styling; working (pink) rows turn white
+
+**Implementation:**
+- All row state changes now use `redrawRows()` instead of `refreshCells()` to ensure row classes (background colors) update correctly

@@ -31,7 +31,7 @@
 
     /* Row states */
     --color-row-processing: #FFECEC;
-    --color-row-completed: #FFFFFF;
+    --color-row-completed: #E6F4EA;  /* Light green for completed rows */
     --color-row-error: #FDE7E9;
 
     /* Spacing (4px base unit) */
@@ -720,7 +720,7 @@ body {
 }
 
 .ag-theme-alpine .row-completed {
-    background-color: var(--color-row-completed);
+    background-color: var(--color-row-completed) !important;
 }
 
 .ag-theme-alpine .row-error {

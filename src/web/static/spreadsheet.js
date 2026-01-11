@@ -170,12 +170,40 @@ function initializeSpreadsheetGrid() {
 function setRowProcessing(rowIndex, processing) {
     if (!gridApi || rowIndex >= gridData.length) return;
 
+    // Don't clear processing if row is already completed (has answer)
+    if (!processing && gridData[rowIndex]._completed) {
+        // Row already completed - just remove from active set, don't touch state
+        activeProcessingRows.delete(rowIndex);
+        return;
+    }
+
+    const rowsToRedraw = [];
+
     if (processing) {
+        // Enforce MAX_PROCESSING_ROWS limit on client side
+        // If we're at the limit, clear the oldest processing row first
+        if (activeProcessingRows.size >= MAX_PROCESSING_ROWS) {
+            // Find rows that are processing but shouldn't show Working anymore
+            for (const oldRowIndex of activeProcessingRows) {
+                if (oldRowIndex !== rowIndex && !gridData[oldRowIndex]._completed) {
+                    // Clear this row's processing state
+                    gridData[oldRowIndex]._processing = false;
+                    gridData[oldRowIndex]._agentName = null;
+                    activeProcessingRows.delete(oldRowIndex);
+                    const oldNode = gridApi.getRowNode(oldRowIndex.toString());
+                    if (oldNode) {
+                        oldNode.setData(gridData[oldRowIndex]);
+                        rowsToRedraw.push(oldNode);
+                    }
+                    break; // Only clear one
+                }
+            }
+        }
+
         // Always clear completed state when starting to process (for retry scenarios)
-        // This must happen regardless of whether we're at the limit
         gridData[rowIndex]._completed = false;
 
-        // Track in active set (allow up to MAX_PROCESSING_ROWS)
+        // Track in active set
         activeProcessingRows.add(rowIndex);
     } else {
         // Remove from active set
@@ -194,16 +222,16 @@ function setRowProcessing(rowIndex, processing) {
     // Track current processing row
     currentProcessingRow = processing ? rowIndex : null;
 
-    // Refresh the row
+    // Refresh the row - use redrawRows to update row class (background color)
     const rowNode = gridApi.getRowNode(rowIndex.toString());
     if (rowNode) {
         rowNode.setData(gridData[rowIndex]);
-        gridApi.refreshCells({ rowNodes: [rowNode], force: true });
+        rowsToRedraw.push(rowNode);
     }
 
-    // Auto-scroll to keep processing row visible
-    if (processing) {
-        gridApi.ensureIndexVisible(rowIndex, 'middle');
+    // Redraw all affected rows
+    if (rowsToRedraw.length > 0) {
+        gridApi.redrawRows({ rowNodes: rowsToRedraw });
     }
 }
 
@@ -223,11 +251,11 @@ function setRowError(rowIndex, errorMessage) {
         gridData[rowIndex][answerColumnField] = `Error: ${errorMessage}`;
     }
 
-    // Refresh the row
+    // Refresh the row - use redrawRows to update row class (background color)
     const rowNode = gridApi.getRowNode(rowIndex.toString());
     if (rowNode) {
         rowNode.setData(gridData[rowIndex]);
-        gridApi.refreshCells({ rowNodes: [rowNode], force: true });
+        gridApi.redrawRows({ rowNodes: [rowNode] });
     }
 }
 
@@ -281,6 +309,48 @@ function formatAgentName(agentName) {
     return 'Working';
 }
 
+function clearAllWorkingCells() {
+    if (!gridApi) return;
+
+    // Find all rows that are processing but not completed
+    const rowsToUpdate = [];
+    for (let i = 0; i < gridData.length; i++) {
+        if (gridData[i]._processing && !gridData[i]._completed) {
+            // Clear processing state
+            gridData[i]._processing = false;
+            gridData[i]._agentName = null;
+            gridData[i]._error = null;
+
+            // Clear the answer cell content (it was showing "Working...")
+            if (answerColumnField && gridData[i][answerColumnField]) {
+                // Only clear if it's a "Working..." type message
+                const cellValue = gridData[i][answerColumnField];
+                if (cellValue === 'Working...' || cellValue.includes('Working') ||
+                    cellValue === 'Checking Links...' || cellValue.includes('Checking')) {
+                    gridData[i][answerColumnField] = '';
+                }
+            }
+
+            rowsToUpdate.push(i);
+        }
+    }
+
+    // Clear the active processing set
+    activeProcessingRows.clear();
+    currentProcessingRow = null;
+
+    // Refresh all affected rows - use redrawRows to update row classes (background color)
+    if (rowsToUpdate.length > 0) {
+        const rowNodes = rowsToUpdate.map(i => gridApi.getRowNode(i.toString())).filter(n => n);
+        rowNodes.forEach(node => {
+            const rowIndex = parseInt(node.id);
+            node.setData(gridData[rowIndex]);
+        });
+        // redrawRows triggers getRowClass re-evaluation (needed to clear pink background)
+        gridApi.redrawRows({ rowNodes: rowNodes });
+    }
+}
+
 // ============================================================================
 // Grid Updates
 // ============================================================================
@@ -309,11 +379,8 @@ function updateGridCell(rowIndex, answer) {
     // Update the data
     rowNode.setData(gridData[rowIndex]);
 
-    // Refresh the cell
-    gridApi.refreshCells({
-        rowNodes: [rowNode],
-        force: true
-    });
+    // Redraw the row to update row class (pink -> green background)
+    gridApi.redrawRows({ rowNodes: [rowNode] });
 
     // Flash the updated cell
     if (answerColumnField) {

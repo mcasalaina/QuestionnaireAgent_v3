@@ -22,14 +22,14 @@ class ColumnIdentifier:
     
     def identify_columns(self, headers: List[str]) -> Dict[str, Optional[int]]:
         """Identify which columns contain Questions, Responses, and Documentation.
-        
+
         Args:
             headers: List of column header names from the spreadsheet
-            
+
         Returns:
             Dictionary with keys 'question', 'response', 'documentation' mapping to column indices (0-based).
             Returns None for columns that cannot be identified.
-            
+
         Example:
             headers = ['Status', 'Owner', 'Q#', 'Question', 'Response', 'Documentation']
             result = {'question': 3, 'response': 4, 'documentation': 5}
@@ -39,9 +39,56 @@ class ColumnIdentifier:
                 return self._identify_with_ai_sync(headers)
             except Exception as e:
                 logger.warning(f"Failed to identify columns with AI, falling back to heuristics: {e}")
-        
+
         # Fallback to heuristic-based identification
         return self._identify_with_heuristics(headers)
+
+    async def identify_columns_async(self, headers: List[str]) -> Dict[str, Optional[int]]:
+        """Async version of identify_columns for use in async contexts.
+
+        Args:
+            headers: List of column header names from the spreadsheet
+
+        Returns:
+            Dictionary with keys 'question', 'response', 'documentation' mapping to column indices (0-based).
+            Returns None for columns that cannot be identified.
+        """
+        if self.azure_client:
+            try:
+                return await self._identify_with_ai_async(headers)
+            except Exception as e:
+                logger.warning(f"Failed to identify columns with AI, falling back to heuristics: {e}")
+
+        # Fallback to heuristic-based identification
+        return self._identify_with_heuristics(headers)
+
+    async def _identify_with_ai_async(self, headers: List[str]) -> Dict[str, Optional[int]]:
+        """Use Azure AI to identify columns from headers (async version).
+
+        Args:
+            headers: List of column header names
+
+        Returns:
+            Dictionary mapping column types to indices
+        """
+        # Create a prompt for the AI to identify columns
+        prompt = f"""You are analyzing a spreadsheet with the following column headers:
+{', '.join([f'Column {i}: "{h}"' for i, h in enumerate(headers)])}
+
+Identify which columns are:
+1. Question column - contains the questions to be answered
+2. Response column - where answers should be written
+3. Documentation column - for documentation links (optional)
+
+Respond ONLY with valid JSON in this exact format, no other text:
+{{"question": <column_index>, "response": <column_index>, "documentation": <column_index_or_null>}}
+
+Use 0-based column indices. If a column cannot be identified, use null.
+"""
+
+        logger.info(f"Sending column identification request to Azure AI with headers: {headers}")
+
+        return await self._identify_with_ai_async_helper(headers, prompt)
     
     def _identify_with_ai_sync(self, headers: List[str]) -> Dict[str, Optional[int]]:
         """Use Azure AI to identify columns from headers (synchronous version).
@@ -87,21 +134,21 @@ Use 0-based column indices. If a column cannot be identified, use null.
     
     async def _identify_with_ai_async_helper(self, headers: List[str], prompt: str) -> Dict[str, Optional[int]]:
         """Async helper for AI identification."""
-        from agent_framework import ChatAgent, ChatMessage, Role
-        
+        from agent_framework import ChatAgent
+
         agent = ChatAgent(
             chat_client=self.azure_client,
-            instructions="""You are a column identification expert. Analyze spreadsheet headers 
-            and identify which columns contain Questions, Responses, and Documentation. 
+            instructions="""You are a column identification expert. Analyze spreadsheet headers
+            and identify which columns contain Questions, Responses, and Documentation.
             Always respond with valid JSON only.""",
             model="gpt-4o-mini"
         )
-        
-        messages = [ChatMessage(role=Role.USER, content=prompt)]
-        response = await agent.invoke(messages)
-        
-        # Parse the AI response
-        response_text = response.messages[-1].content if response.messages else ""
+
+        # Pass prompt directly as string, use .text property on response
+        response = await agent.run(prompt)
+
+        # Parse the AI response - use .text property
+        response_text = response.text if response else ""
         logger.info(f"Received column identification response: {response_text}")
         
         # Extract JSON from response

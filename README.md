@@ -1,6 +1,6 @@
 # Questionnaire Multiagent Application
 
-**Version 3** - A windowed application that orchestrates three Azure AI Foundry agents to answer questions with fact-checking and link validation. Features both individual question processing and Excel import/export functionality, with a legacy command-line interface also available.
+**Version 3** - A web-based application that orchestrates three Azure AI Foundry agents to answer questions with fact-checking and link validation. Features both individual question processing and Excel import/export functionality, with a browser-based interface, desktop GUI, and command-line interface.
 
 Originally created by Marco Casalaina. This version was authored using [GitHub Copilot Agent](https://github.com/features/copilot), the [Microsoft Agent Framework](https://github.com/microsoft/azureai-agent-framework), and [Spec Kit](https://github.com/microsoft/spec).
 
@@ -16,9 +16,11 @@ If either checker rejects the answer, the Question Answerer reformulates and the
 
 ## Features
 
-- **Windowed GUI**: User-friendly interface built with Python tkinter
+- **Web Interface**: Browser-based UI with real-time progress via Server-Sent Events
+- **Desktop GUI**: Alternative Python tkinter interface for local use
 - **Command Line Options**: Configure settings and auto-start processing from the command line
 - **Excel Integration**: Import questions from Excel files and export results
+- **Parallel Processing**: Process up to 3 questions simultaneously using multiple agent sets
 - **Real-time Progress**: Live reasoning display showing agent workflow
 - **Character Limit Control**: Configurable answer length with automatic retries
 - **Web Grounding**: All agents use Bing search via Azure AI Foundry
@@ -65,15 +67,32 @@ pip install -e .
 
 ## Usage
 
-### Primary GUI Application
+### Web Interface (Recommended)
 
-Ensure your virtual environment is activated, then run the main windowed application:
+The web interface is the primary way to use the application. Start the web server:
+
+```bash
+# Start web server on default port (8080) and auto-open browser
+python run_app.py --web
+
+# Start on a custom port
+python run_app.py --web --port 3000
+
+# Start without opening browser (for remote servers or automated testing)
+python run_app.py --web --port 8080 --no-browser
+```
+
+See the "Web Interface" section below for detailed usage instructions.
+
+### Desktop GUI Application
+
+Alternatively, run the standalone desktop application (requires display):
 
 ```bash
 python run_app.py
 ```
 
-#### Command Line Options
+### Command Line Options
 
 The application supports command line options to configure settings and auto-start processing:
 
