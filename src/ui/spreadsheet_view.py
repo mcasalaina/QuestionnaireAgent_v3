@@ -231,10 +231,6 @@ class SpreadsheetView:
         if answer and state == CellState.COMPLETED:
             self.sheet_data.answers[row_index] = answer
         
-        # Auto-scroll to keep active cell visible
-        if state == CellState.WORKING:
-            self._auto_scroll_to_row(row_index)
-        
         logger.debug(f"Updated cell [{row_index}] to {state.value} with alternating color")
     
     def _get_response_text(self, state: CellState, answer: str, agent_name: Optional[str] = None) -> str:
