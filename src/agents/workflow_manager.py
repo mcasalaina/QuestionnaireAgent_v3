@@ -27,18 +27,20 @@ logger = logging.getLogger(__name__)
 class AgentCoordinator:
     """Orchestrates multi-agent workflow using Microsoft Agent Framework."""
     
-    def __init__(self, azure_client: AzureAIAgentClient, bing_connection_id: str, 
-                 browser_automation_connection_id: str):
+    def __init__(self, azure_client: AzureAIAgentClient, bing_connection_id: str,
+                 browser_automation_connection_id: str, project_client=None):
         """Initialize the agent coordinator.
-        
+
         Args:
             azure_client: Azure AI Agent client for creating agents.
             bing_connection_id: Bing search connection ID for web grounding.
             browser_automation_connection_id: Browser automation connection ID for link checking.
+            project_client: Azure AI Project client for connection resolution (optional).
         """
         self.azure_client = azure_client
         self.bing_connection_id = bing_connection_id
         self.browser_automation_connection_id = browser_automation_connection_id
+        self.project_client = project_client
         self.workflow: Optional[Workflow] = None
         self.executors_created = False
         
@@ -450,20 +452,21 @@ class AgentCoordinator:
             logger.warning(f"Error during agent cleanup: {e}")
 
 
-async def create_agent_coordinator(azure_client: AzureAIAgentClient, bing_connection_id: str, 
-                                  browser_automation_connection_id: str) -> AgentCoordinator:
+async def create_agent_coordinator(azure_client: AzureAIAgentClient, bing_connection_id: str,
+                                  browser_automation_connection_id: str, project_client=None) -> AgentCoordinator:
     """Create and initialize an agent coordinator.
-    
+
     Args:
         azure_client: Azure AI Agent client.
         bing_connection_id: Bing search connection ID.
         browser_automation_connection_id: Browser automation connection ID for link checking.
-        
+        project_client: Optional Azure AI Project client for browser automation.
+
     Returns:
         Initialized AgentCoordinator instance.
     """
     logger.info("Creating agent coordinator...")
-    coordinator = AgentCoordinator(azure_client, bing_connection_id, browser_automation_connection_id)
+    coordinator = AgentCoordinator(azure_client, bing_connection_id, browser_automation_connection_id, project_client)
     
     logger.info("Creating agents with 60 second timeout...")
     try:

@@ -331,6 +331,7 @@ class SheetData:
     response_col_index: Optional[int] = None
     documentation_col_index: Optional[int] = None
     row_indices: Optional[List[int]] = None  # Original Excel row numbers (1-based) for each question
+    header_row_num: int = 1  # Row number where headers are located (1-based)
     
     def __post_init__(self):
         """Validate invariants."""

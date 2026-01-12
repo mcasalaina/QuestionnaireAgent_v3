@@ -15,12 +15,112 @@ class ExcelLoader:
     
     def __init__(self, column_identifier=None):
         """Initialize Excel loader.
-        
+
         Args:
             column_identifier: Optional ColumnIdentifier instance for detecting columns.
                              If None, will use fallback (column A = Question, B = Response).
         """
         self.column_identifier = column_identifier
+
+    def _run_async_in_thread(self, coro):
+        """Run an async coroutine in a separate thread with its own event loop.
+
+        This is necessary when calling async code from a context that already
+        has a running event loop (like FastAPI).
+
+        Args:
+            coro: The coroutine to run
+
+        Returns:
+            The result of the coroutine
+        """
+        import asyncio
+        import threading
+
+        result = None
+        error = None
+
+        def run_in_thread():
+            nonlocal result, error
+            try:
+                # Create a new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(coro)
+                finally:
+                    # Clean up pending tasks before closing the loop
+                    pending = asyncio.all_tasks(loop)
+                    for task in pending:
+                        task.cancel()
+                    # Give tasks a chance to complete cancellation
+                    if pending:
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    loop.close()
+            except Exception as e:
+                error = e
+
+        thread = threading.Thread(target=run_in_thread)
+        thread.start()
+        thread.join(timeout=60)  # Add timeout to prevent hanging
+
+        if thread.is_alive():
+            raise TimeoutError("Async operation timed out after 60 seconds")
+
+        if error:
+            raise error
+        return result
+
+    def _run_async_in_thread_v2(self, async_func):
+        """Run an async function in a separate thread with its own event loop.
+
+        This version takes an async function (not a coroutine), so the coroutine
+        is created inside the thread's event loop, avoiding issues with event loop
+        references.
+
+        Args:
+            async_func: An async function to call (not a coroutine)
+
+        Returns:
+            The result of the async function
+        """
+        import asyncio
+        import threading
+
+        result = None
+        error = None
+
+        def run_in_thread():
+            nonlocal result, error
+            try:
+                # Create a new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    # Call the async function inside this thread's event loop
+                    result = loop.run_until_complete(async_func())
+                finally:
+                    # Clean up pending tasks before closing the loop
+                    pending = asyncio.all_tasks(loop)
+                    for task in pending:
+                        task.cancel()
+                    # Give tasks a chance to complete cancellation
+                    if pending:
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    loop.close()
+            except Exception as e:
+                error = e
+
+        thread = threading.Thread(target=run_in_thread)
+        thread.start()
+        thread.join(timeout=60)  # Add timeout to prevent hanging
+
+        if thread.is_alive():
+            raise TimeoutError("Async operation timed out after 60 seconds")
+
+        if error:
+            raise error
+        return result
     
     def load_workbook(self, file_path: str) -> WorkbookData:
         """Load Excel file into WorkbookData structure.
@@ -55,15 +155,23 @@ class ExcelLoader:
             if ws.sheet_state != 'visible':
                 logger.info(f"Skipping hidden sheet: {sheet_name}")
                 continue
-            
-            # Get headers from first row
+
+            # Find the actual header row (it may not be row 1)
+            header_row_num = self._find_header_row(ws)
+            if header_row_num is None:
+                logger.warning(f"Sheet '{sheet_name}' has no recognizable header row, skipping")
+                continue
+
+            # Get headers from identified header row
             headers = []
-            for cell in ws[1]:
+            for cell in ws[header_row_num]:
                 headers.append(cell.value if cell.value else '')
-            
+
             if not headers:
                 logger.warning(f"Sheet '{sheet_name}' has no headers, skipping")
                 continue
+
+            logger.info(f"Found headers in row {header_row_num} for sheet '{sheet_name}'")
             
             # Identify columns using column identifier or fallback to defaults
             column_mapping = {'question': 0, 'response': 1, 'documentation': None}
@@ -84,26 +192,30 @@ class ExcelLoader:
                 continue
             
             # Extract questions from identified question column (0-based to 1-based for openpyxl)
-            # Skip blank rows and section headers, tracking original row indices
-            questions = []
-            row_indices = []  # Track original Excel row numbers (1-based)
-            
-            for row in ws.iter_rows(min_row=2, min_col=question_col+1, max_col=question_col+1):
+            # Collect all non-blank rows first, then use LLM to filter
+            all_rows = []
+            for row in ws.iter_rows(min_row=header_row_num+1, min_col=question_col+1, max_col=question_col+1):
                 cell = row[0]
                 cell_value = str(cell.value).strip() if cell.value else ''
-                
+
                 # Skip blank cells
                 if not cell_value:
                     logger.debug(f"Skipping blank row {cell.row} in sheet '{sheet_name}'")
                     continue
-                
-                # Skip section headers (heuristic detection)
-                if self._is_section_header(cell_value):
-                    logger.info(f"Skipping section header at row {cell.row} in sheet '{sheet_name}': '{cell_value}'")
-                    continue
-                
-                questions.append(cell_value)
-                row_indices.append(cell.row)  # Store the actual Excel row number (1-based)
+
+                all_rows.append({
+                    'row_num': cell.row,
+                    'text': cell_value
+                })
+
+            # Use LLM to filter out section titles/labels, keeping only actual questions
+            questions = []
+            row_indices = []
+
+            if all_rows:
+                filtered_rows = self._filter_questions_with_llm(all_rows, sheet_name)
+                questions = [r['text'] for r in filtered_rows]
+                row_indices = [r['row_num'] for r in filtered_rows]
             
             if not questions:
                 logger.warning(f"Sheet '{sheet_name}' has no questions, skipping")
@@ -125,7 +237,8 @@ class ExcelLoader:
                 question_col_index=question_col,
                 response_col_index=response_col,
                 documentation_col_index=doc_col,
-                row_indices=row_indices
+                row_indices=row_indices,
+                header_row_num=header_row_num
             )
             sheets.append(sheet_data)
         
@@ -141,7 +254,233 @@ class ExcelLoader:
         logger.info(f"Loaded {len(sheets)} sheets with {total_questions} total questions")
         
         return WorkbookData(file_path=file_path, sheets=sheets)
-    
+
+    def _find_header_row(self, ws) -> int:
+        """Find the row containing column headers using LLM.
+
+        Uses Azure AI to intelligently identify which row contains the actual column headers.
+
+        Args:
+            ws: openpyxl worksheet object
+
+        Returns:
+            Row number (1-based) of the header row
+        """
+        import asyncio
+        import threading
+
+        # Get first 10 rows
+        rows_data = []
+        for row_num in range(1, min(11, ws.max_row + 1)):
+            row_values = []
+            for cell in ws[row_num]:
+                val = str(cell.value) if cell.value else ""
+                row_values.append(val[:100])  # Limit cell length
+            if any(row_values):  # Skip completely empty rows
+                rows_data.append({
+                    'row_number': row_num,
+                    'values': row_values[:10]  # Limit to first 10 columns
+                })
+
+        if not rows_data:
+            return 1
+
+        # Build prompt for LLM
+        rows_text = "\n".join([
+            f"Row {r['row_number']}: {' | '.join([v for v in r['values'] if v])}"
+            for r in rows_data
+        ])
+
+        prompt = f"""You are analyzing an Excel spreadsheet to find the header row.
+
+Here are the first few rows:
+
+{rows_text}
+
+Which row number contains the column headers (the row with column names like "Question", "Answer", "Response", "Index", etc.)?
+
+Respond with ONLY the row number as a single integer, nothing else."""
+
+        try:
+            # Run async code in a separate thread to avoid event loop conflicts
+            async def do_header_detection():
+                return await self._ask_llm_for_header_row(prompt)
+
+            result = self._run_async_in_thread_v2(do_header_detection)
+
+            # Parse the response
+            row_num = int(result.strip())
+            if 1 <= row_num <= min(10, ws.max_row):
+                logger.info(f"LLM identified header row: {row_num}")
+                return row_num
+            else:
+                logger.warning(f"LLM returned invalid row number {row_num}, using fallback")
+                return self._find_header_row_fallback(ws)
+        except Exception as e:
+            logger.warning(f"LLM header detection failed: {e}, using fallback")
+            return self._find_header_row_fallback(ws)
+
+    async def _ask_llm_for_header_row(self, prompt: str) -> str:
+        """Ask LLM to identify header row."""
+        from agent_framework import ChatAgent
+        from agent_framework_azure_ai import AzureAIAgentClient
+        from azure.ai.projects.aio import AIProjectClient
+        from azure.identity.aio import DefaultAzureCredential
+        from utils.config import config_manager
+
+        # Create a fresh Azure client for this thread's event loop
+        endpoint = config_manager.get_azure_endpoint()
+        model_deployment = config_manager.get_model_deployment()
+        credential = DefaultAzureCredential()
+
+        project_client = AIProjectClient(
+            endpoint=endpoint,
+            credential=credential
+        )
+
+        azure_client = AzureAIAgentClient(
+            project_client=project_client,
+            credential=credential,
+            model_deployment_name=model_deployment
+        )
+
+        # Create a ChatAgent for this task
+        agent = ChatAgent(
+            chat_client=azure_client,
+            name="Header Row Identifier",
+            instructions="You are a data analysis assistant that identifies column headers in spreadsheets."
+        )
+
+        # Get the response
+        response = await agent.run(prompt)
+
+        return response.text if response else ""
+
+    def _find_header_row_fallback(self, ws) -> int:
+        """Fallback method to find header row using simple heuristics."""
+        # Look for a row with multiple non-numeric values
+        for row_num in range(1, min(11, ws.max_row + 1)):
+            non_empty_count = 0
+            for cell in ws[row_num]:
+                if cell.value and not str(cell.value).isdigit():
+                    non_empty_count += 1
+            if non_empty_count >= 2:
+                return row_num
+        return 1
+
+    def _filter_questions_with_llm(self, rows: List[dict], sheet_name: str) -> List[dict]:
+        """Filter out section titles/labels, keeping only actual questions using LLM.
+
+        Args:
+            rows: List of dicts with 'row_num' and 'text' keys
+            sheet_name: Name of the sheet being processed
+
+        Returns:
+            Filtered list of rows containing only actual questions
+        """
+        if not rows:
+            return []
+
+        # Build list of rows for LLM analysis
+        rows_text = "\n".join([
+            f"{i+1}. (Row {r['row_num']}): {r['text'][:200]}"
+            for i, r in enumerate(rows)
+        ])
+
+        prompt = f"""You are analyzing an Excel questionnaire to identify actual questions that need answers.
+
+Here are the rows from the "{sheet_name}" sheet Question column:
+
+{rows_text}
+
+Your task: Identify which rows contain items that need to be answered in a questionnaire.
+
+EXCLUDE ONLY these types of rows:
+- Pure section titles with no content expectation (e.g., "Platform Overview", "Section 1: Background")
+- Instructional text for the entire section (e.g., "Answer all questions below", "Provide details in Column C")
+- Decorative separators (e.g., "---", "===", "***")
+
+INCLUDE these types of rows (these ALL need answers):
+- Direct questions (e.g., "What is your platform name?", "Do you support training?")
+- Imperative prompts (e.g., "Describe your capabilities", "List your differentiators", "Explain how...")
+- Feature/capability items in a checklist format (e.g., "Automated ML pipeline orchestration", "Feature store support")
+- Any statement that expects the user to provide information, even if not phrased as a question
+- Items that would have a yes/no, description, or details as an answer
+
+IMPORTANT RULES:
+- If it's a feature, capability, or technical item that expects a response (yes/no/details), INCLUDE it
+- If it's just organizing the questionnaire into sections without expecting an answer, EXCLUDE it
+- When in doubt, INCLUDE it (be permissive, not restrictive)
+
+Respond with ONLY a JSON array of the row numbers (from the original "Row X" labels) that need answers.
+Example response format: [4, 5, 9, 10, 14]
+
+If none of the rows need answers, respond with: []"""
+
+        try:
+            # Run async code in a separate thread to avoid event loop conflicts
+            async def do_filtering():
+                return await self._ask_llm_for_filtering(prompt)
+
+            result = self._run_async_in_thread_v2(do_filtering)
+
+            # Parse JSON response
+            import json
+            try:
+                question_row_nums = json.loads(result.strip())
+                if not isinstance(question_row_nums, list):
+                    logger.warning(f"LLM returned invalid format, using all rows")
+                    return rows
+
+                # Filter to only rows with matching row numbers
+                filtered = [r for r in rows if r['row_num'] in question_row_nums]
+                logger.info(f"LLM filtered {len(rows)} rows down to {len(filtered)} questions in sheet '{sheet_name}'")
+                return filtered
+
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse LLM filtering response as JSON: {e}, using all rows")
+                return rows
+
+        except Exception as e:
+            logger.warning(f"LLM filtering failed: {e}, using all rows")
+            return rows
+
+    async def _ask_llm_for_filtering(self, prompt: str) -> str:
+        """Ask LLM to identify which rows are actual questions."""
+        from agent_framework import ChatAgent
+        from agent_framework_azure_ai import AzureAIAgentClient
+        from azure.ai.projects.aio import AIProjectClient
+        from azure.identity.aio import DefaultAzureCredential
+        from utils.config import config_manager
+
+        # Create a fresh Azure client for this thread's event loop
+        endpoint = config_manager.get_azure_endpoint()
+        model_deployment = config_manager.get_model_deployment()
+        credential = DefaultAzureCredential()
+
+        project_client = AIProjectClient(
+            endpoint=endpoint,
+            credential=credential
+        )
+
+        azure_client = AzureAIAgentClient(
+            project_client=project_client,
+            credential=credential,
+            model_deployment_name=model_deployment
+        )
+
+        # Create a ChatAgent for this task
+        agent = ChatAgent(
+            chat_client=azure_client,
+            name="Question Filter",
+            instructions="You are a data analysis assistant that identifies actual questions in questionnaires, distinguishing them from section titles and labels."
+        )
+
+        # Get the response
+        response = await agent.run(prompt)
+
+        return response.text if response else ""
+
     # Constants for section header detection heuristics
     _MIN_TEXT_LENGTH = 3
     _MAX_NUMBERED_HEADER_LENGTH = 60

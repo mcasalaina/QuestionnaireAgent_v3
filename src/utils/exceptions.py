@@ -1,4 +1,5 @@
 """Custom exception classes for the questionnaire application."""
+from __future__ import annotations
 
 
 class QuestionnaireError(Exception):

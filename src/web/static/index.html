@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Questionnaire Agent - Microsoft Agent Framework</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico">
+    <link rel="stylesheet" href="/static/styles.css">
+    <!-- ag-Grid Community Edition -->
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.0.1/dist/ag-grid-community.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="header-title">
+                    <img src="https://devblogs.microsoft.com/foundry/wp-content/uploads/sites/89/2025/03/ai-foundry.png"
+                         alt="Azure AI Foundry"
+                         class="header-logo">
+                    <h1 class="app-title">Questionnaire Agent - Microsoft Agent Framework</h1>
+                </div>
+                <div class="azure-status">
+                    <span id="azure-status-indicator" class="status-indicator checking"></span>
+                    <span id="azure-status-text" class="status-label">Checking Azure...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Left Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-content">
+                    <!-- Context Input -->
+                    <div class="form-group">
+                        <label for="context-input">Context</label>
+                        <input type="text" id="context-input" class="form-input"
+                               value="Microsoft Azure AI"
+                               placeholder="Enter context...">
+                    </div>
+
+                    <!-- Character Limit -->
+                    <div class="form-group">
+                        <label for="char-limit-input">Character Limit</label>
+                        <input type="number" id="char-limit-input" class="form-input"
+                               value="2000" min="100" max="10000">
+                    </div>
+
+                    <!-- Maximum Retries -->
+                    <div class="form-group">
+                        <label for="max-retries-input">Maximum Retries</label>
+                        <input type="number" id="max-retries-input" class="form-input"
+                               value="10" min="1" max="50">
+                    </div>
+
+                    <!-- Question Textarea -->
+                    <div class="form-group">
+                        <label for="question-input">Question</label>
+                        <textarea id="question-input" class="form-textarea"
+                                  rows="4"
+                                  placeholder="Enter your question here..."></textarea>
+                    </div>
+
+                    <!-- Ask Button -->
+                    <button id="ask-btn" class="btn btn-primary btn-full">
+                        Ask!
+                    </button>
+
+                    <!-- Import From Excel Button -->
+                    <div class="file-upload-wrapper">
+                        <input type="file" id="file-upload" class="file-input"
+                               accept=".xlsx,.xls">
+                        <button id="import-btn" class="btn btn-secondary btn-full" onclick="document.getElementById('file-upload').click()">
+                            Import From Excel
+                        </button>
+                        <span id="file-name" class="file-name-display"></span>
+                    </div>
+
+                    <!-- Stop/Download buttons (shown during/after spreadsheet processing) -->
+                    <div id="spreadsheet-controls" class="spreadsheet-controls hidden">
+                        <button id="stop-processing-btn" class="btn btn-danger btn-full" disabled>
+                            Stop Processing
+                        </button>
+                        <button id="download-btn" class="btn btn-secondary btn-full" disabled>
+                            Download Results
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Panel -->
+            <div class="main-panel">
+                <!-- Ask Question Mode Content -->
+                <div id="question-mode" class="mode-content">
+                    <div class="question-response-area">
+                        <!-- Loading Indicator -->
+                        <div id="question-loading" class="loading-indicator hidden">
+                            <div class="spinner"></div>
+                            <span>Processing your question...</span>
+                        </div>
+
+                        <!-- Answer Section -->
+                        <div id="answer-section" class="answer-section hidden">
+                            <h3 class="section-title">Answer</h3>
+                            <div id="answer-content" class="answer-content"></div>
+                            <div class="answer-meta">
+                                <span id="answer-time"></span>
+                                <span id="answer-links"></span>
+                            </div>
+
+                            <!-- Reasoning Toggle -->
+                            <details id="reasoning-details" class="reasoning-section">
+                                <summary class="reasoning-toggle">
+                                    Show Reasoning
+                                </summary>
+                                <div id="reasoning-content" class="reasoning-content"></div>
+                            </details>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div id="empty-state" class="empty-state">
+                            <p>Enter a question and click "Ask!" to get started.</p>
+                            <p class="empty-state-hint">Or import an Excel spreadsheet to process multiple questions.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Spreadsheet Mode Content -->
+                <div id="spreadsheet-mode" class="mode-content hidden">
+                    <!-- Column Mapping Modal (shown when auto-mapping fails) -->
+                    <div id="column-mapping" class="column-mapping hidden">
+                        <div class="mapping-header">
+                            <h3>Column Mapping Required</h3>
+                            <p class="mapping-message">Could not auto-detect columns. Please select manually.</p>
+                        </div>
+                        <div class="column-selectors">
+                            <div class="form-group">
+                                <label for="sheet-select">Worksheet</label>
+                                <select id="sheet-select" class="form-select"></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="question-col-select">Question Column</label>
+                                <select id="question-col-select" class="form-select"></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="answer-col-select">Answer Column</label>
+                                <select id="answer-col-select" class="form-select"></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="context-col-select">Context Column (Optional)</label>
+                                <select id="context-col-select" class="form-select">
+                                    <option value="">Use default context</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="doc-col-select">Documentation Column (Optional)</label>
+                                <select id="doc-col-select" class="form-select">
+                                    <option value="">No documentation column</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button id="start-processing-btn" class="btn btn-primary">
+                            Start Processing
+                        </button>
+                    </div>
+
+                    <!-- Spreadsheet Container with Grid and Tabs -->
+                    <div class="spreadsheet-container">
+                        <!-- Spreadsheet Grid -->
+                        <div id="spreadsheet-grid" class="spreadsheet-grid"></div>
+
+                        <!-- Sheet Tabs (bottom of spreadsheet) -->
+                        <div id="sheet-tabs" class="sheet-tabs">
+                            <!-- Tabs will be dynamically generated -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Status Bar (Fixed at Bottom) -->
+        <footer class="status-bar">
+            <div class="status-bar-content">
+                <span id="connection-indicator" class="connection-indicator connected"></span>
+                <span id="status-text" class="status-text">Ready</span>
+            </div>
+        </footer>
+
+        <!-- Error Toast -->
+        <div id="error-toast" class="toast error-toast hidden">
+            <span id="error-message"></span>
+            <button class="toast-close" onclick="hideToast()">&times;</button>
+        </div>
+
+        <!-- Success Toast -->
+        <div id="success-toast" class="toast success-toast hidden">
+            <span id="success-message"></span>
+            <button class="toast-close" onclick="hideSuccessToast()">&times;</button>
+        </div>
+    </div>
+
+    <!-- Reasoning Modal for Spreadsheet Rows -->
+    <div id="reasoning-modal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeReasoningModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Reasoning Details</h3>
+                <button class="modal-close" onclick="closeReasoningModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-section">
+                    <h4>Question</h4>
+                    <p id="modal-question"></p>
+                </div>
+                <div class="modal-section">
+                    <h4>Answer</h4>
+                    <p id="modal-answer"></p>
+                </div>
+                <div class="modal-section">
+                    <h4>Reasoning</h4>
+                    <div id="modal-reasoning" class="reasoning-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script src="/static/spreadsheet.js"></script>
+</body>
+</html>
