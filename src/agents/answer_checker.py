@@ -46,6 +46,7 @@ VALIDATION CRITERIA:
 6. Sources: Are included links relevant and from authoritative sources?
 7. Formatting: Is the answer in PLAIN TEXT with NO markdown formatting?
 8. Professionalism: Answer must NOT contain self-referential language
+9. No Reader Instructions: Answer must NOT give instructions or advice to the reader
 
 CRITICAL - SELF-REFERENTIAL LANGUAGE CHECK:
 - REJECT if answer contains phrases like "I am an AI assistant", "As an AI", "I can help", "I will", "I have"
@@ -53,6 +54,14 @@ CRITICAL - SELF-REFERENTIAL LANGUAGE CHECK:
 - REJECT if answer includes any introductory statements about what it is or its capabilities
 - REJECT if answer contains any self-referential preambles or introductions
 - The answer must start directly with the content, not with statements about itself
+
+CRITICAL - NO READER INSTRUCTIONS CHECK:
+- REJECT if answer includes instructions to the reader (e.g., "Always review the latest documentation", "Consult with a sales representative", "Check with your administrator")
+- REJECT if answer includes disclaimers about information changing (e.g., "since the bundling and commercial packaging of features may change")
+- REJECT if answer suggests the reader do additional research or verification
+- REJECT if answer contains phrases like "always", "be sure to", "make sure to", "remember to", "consider doing", "it is recommended that you"
+- REJECT if answer gives advice rather than facts
+- The answer should contain ONLY factual information about the topic, not instructions or advice to the reader
 
 FORMATTING VALIDATION:
 - REJECT if answer contains **bold**, *italics*, `code blocks`, or # headers
@@ -69,18 +78,20 @@ If APPROVED:
 - Highlight strengths and accuracy of the content
 - Confirm it's in plain text format
 - Confirm it contains no self-referential language
+- Confirm it contains no reader instructions or advice
 
 If REJECTED:
 - Specify exactly what needs to be improved
-- Be specific about factual errors, missing information, quality issues, formatting problems, or self-referential language
+- Be specific about factual errors, missing information, quality issues, formatting problems, self-referential language, or reader instructions
 - Provide clear guidance for improvement
 - If self-referential language is present, explicitly state that and provide examples
+- If reader instructions are present, explicitly quote the problematic phrases
 
 IMPORTANT:
 - Be thorough but decisive in your evaluation
-- Prioritize accuracy, completeness, plain text formatting, and professionalism
-- Reject answers that are incomplete, inaccurate, poorly structured, use markdown, or contain self-referential language
-- Only approve answers that truly meet professional standards, are in plain text, AND contain no self-referential language"""
+- Prioritize accuracy, completeness, plain text formatting, professionalism, and factual-only content
+- Reject answers that are incomplete, inaccurate, poorly structured, use markdown, contain self-referential language, or give instructions to the reader
+- Only approve answers that truly meet professional standards, are in plain text, contain no self-referential language, AND contain only factual information"""
             )
         return self.agent
     
@@ -242,12 +253,21 @@ VALIDATION REQUIREMENTS:
 - Must be professionally written
 - MUST be in plain text format with NO markdown formatting
 - MUST NOT contain self-referential language
+- MUST NOT contain reader instructions or advice
 
 PROFESSIONALISM CHECK:
 - Verify answer has NO self-referential phrases like "I am an AI assistant", "As an AI", "I can help", "I will"
 - Verify answer does NOT use first-person language referring to itself
 - Verify answer does NOT include introductory statements about what it is
 - REJECT if any self-referential or first-person language is present
+
+READER INSTRUCTIONS CHECK:
+- Verify answer has NO instructions to the reader (e.g., "Always review the latest documentation", "Consult with a sales representative", "Check with your administrator")
+- Verify answer has NO disclaimers about information changing (e.g., "since features may change", "subject to updates")
+- Verify answer does NOT suggest the reader do additional research or verification
+- Verify answer has NO phrases like "always", "be sure to", "make sure to", "remember to", "consider", "it is recommended"
+- REJECT if any reader instructions or advice are present
+- The answer should contain ONLY factual information, not advice
 
 FORMATTING CHECK:
 - Verify answer has NO **bold**, *italics*, `code`, # headers
