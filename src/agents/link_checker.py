@@ -23,15 +23,18 @@ logger = logging.getLogger(__name__)
 class LinkCheckerExecutor(Executor):
     """Executor for the Link Checker agent in the multi-agent workflow."""
     
-    def __init__(self, azure_client: AzureAIAgentClient, browser_automation_connection_id: str):
+    def __init__(self, azure_client: AzureAIAgentClient, browser_automation_connection_id: str,
+                 project_client: Optional[AIProjectClient] = None):
         """Initialize the Link Checker executor.
-        
+
         Args:
             azure_client: Azure AI Agent client instance.
             browser_automation_connection_id: Browser automation connection name for web verification.
+            project_client: Azure AI Project client for connection resolution (optional).
         """
         super().__init__(id="link_checker")
         self.azure_client = azure_client
+        self.project_client = project_client
         self.browser_automation_connection_name = browser_automation_connection_id
         self.browser_automation_connection_id: Optional[str] = None
         self.agent: Optional[ChatAgent] = None
@@ -53,19 +56,18 @@ class LinkCheckerExecutor(Executor):
         
         try:
             logger.debug(f"Resolving connection ID for: {self.browser_automation_connection_name}")
-            
-            # Get the AIProjectClient from the azure_client
-            # The azure_client is an AzureAIAgentClient which contains project_client
-            if hasattr(self.azure_client, 'project_client'):
-                project_client = self.azure_client.project_client
-            else:
-                raise AgentExecutionError("Cannot access project_client from azure_client")
-            
+
+            # Use the project_client that was passed during initialization
+            if self.project_client is None:
+                # If not provided, try to import and get it from azure_auth
+                from utils.azure_auth import get_project_client
+                self.project_client = await get_project_client()
+
             # Get the connection by name to retrieve its full ID
             # Note: connections.get() is async and must be awaited
-            connection = await project_client.connections.get(self.browser_automation_connection_name)
+            connection = await self.project_client.connections.get(self.browser_automation_connection_name)
             self.browser_automation_connection_id = connection.id
-            
+
             logger.debug(f"Resolved connection ID: {self.browser_automation_connection_id}")
             return self.browser_automation_connection_id
             

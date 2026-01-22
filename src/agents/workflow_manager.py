@@ -74,7 +74,8 @@ class AgentCoordinator:
             logger.info("Creating link checker executor...")
             self.link_checker = LinkCheckerExecutor(
                 azure_client=self.azure_client,
-                browser_automation_connection_id=self.browser_automation_connection_id
+                browser_automation_connection_id=self.browser_automation_connection_id,
+                project_client=self.project_client
             )
             
             logger.info("Building workflow...")
