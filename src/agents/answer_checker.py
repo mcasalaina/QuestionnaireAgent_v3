@@ -4,8 +4,8 @@ import logging
 import time
 import asyncio
 from typing import Any, Dict, Optional
-from agent_framework import Executor, handler, WorkflowContext, ChatAgent, ChatMessage, Role
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework import Executor, handler, WorkflowContext, RawAgent, Message
+from agent_framework.azure import AzureAIClient
 from utils.data_types import (
     Question, AgentStep, AgentType, StepStatus, ValidationStatus
 )
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class AnswerCheckerExecutor(Executor):
     """Executor for the Answer Checker agent in the multi-agent workflow."""
     
-    def __init__(self, azure_client: AzureAIAgentClient):
+    def __init__(self, azure_client: AzureAIClient):
         """Initialize the Answer Checker executor.
         
         Args:
@@ -27,14 +27,14 @@ class AnswerCheckerExecutor(Executor):
         """
         super().__init__(id="answer_checker")
         self.azure_client = azure_client
-        self.agent: Optional[ChatAgent] = None
+        self.agent: Optional[RawAgent] = None
     
-    async def _get_agent(self) -> ChatAgent:
+    async def _get_agent(self) -> RawAgent:
         """Get or create the answer checker agent."""
         if self.agent is None:
-            self.agent = ChatAgent(
-                chat_client=self.azure_client,
-                name="Answer Checker",
+            self.agent = RawAgent(
+                self.azure_client,
+                name="answer-checker",
                 instructions="""You are an expert Answer Checker who validates the quality, accuracy, and completeness of generated answers. You must evaluate answers against strict quality standards.
 
 VALIDATION CRITERIA:
@@ -122,7 +122,7 @@ IMPORTANT:
                 
                 # Create validation prompt
                 validation_prompt = self._build_validation_prompt(question, raw_answer)
-                messages = [ChatMessage(role=Role.USER, text=validation_prompt)]
+                messages = [Message(role="user", text=validation_prompt)]
                 logger.info(f"📝 Built validation prompt ({len(validation_prompt)} chars), sending to agent...")
                 logger.info(f"🎯 Validation criteria: accuracy, completeness, {question.char_limit} char limit, plain text format")
                 
@@ -305,7 +305,7 @@ Provide your validation decision:"""
             logger.info("Cleaning up Answer Checker agent...")
             try:
                 # The Microsoft Agent Framework handles agent lifecycle automatically
-                # when the underlying AzureAIAgentClient is closed
+                # when the underlying AzureAIClient is closed
                 logger.debug("Answer Checker agent cleanup completed")
             except Exception as e:
                 logger.warning(f"Error during Answer Checker cleanup: {e}")

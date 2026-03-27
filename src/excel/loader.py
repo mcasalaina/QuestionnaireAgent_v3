@@ -322,9 +322,8 @@ Respond with ONLY the row number as a single integer, nothing else."""
 
     async def _ask_llm_for_header_row(self, prompt: str) -> str:
         """Ask LLM to identify header row."""
-        from agent_framework import ChatAgent
-        from agent_framework_azure_ai import AzureAIAgentClient
-        from azure.ai.projects.aio import AIProjectClient
+        from agent_framework import RawAgent
+        from agent_framework.azure import AzureAIClient
         from azure.identity.aio import DefaultAzureCredential
         from utils.config import config_manager
 
@@ -333,21 +332,16 @@ Respond with ONLY the row number as a single integer, nothing else."""
         model_deployment = config_manager.get_model_deployment()
         credential = DefaultAzureCredential()
 
-        project_client = AIProjectClient(
-            endpoint=endpoint,
-            credential=credential
-        )
-
-        azure_client = AzureAIAgentClient(
-            project_client=project_client,
+        azure_client = AzureAIClient(
+            project_endpoint=endpoint,
             credential=credential,
             model_deployment_name=model_deployment
         )
 
-        # Create a ChatAgent for this task
-        agent = ChatAgent(
-            chat_client=azure_client,
-            name="Header Row Identifier",
+        # Create a RawAgent for this task
+        agent = RawAgent(
+            azure_client,
+            name="header-row-identifier",
             instructions="You are a data analysis assistant that identifies column headers in spreadsheets."
         )
 
@@ -395,25 +389,25 @@ Here are the rows from the "{sheet_name}" sheet Question column:
 
 Your task: Identify which rows contain items that need to be answered in a questionnaire.
 
-EXCLUDE ONLY these types of rows:
-- Pure section titles with no content expectation (e.g., "Platform Overview", "Section 1: Background")
-- Instructional text for the entire section (e.g., "Answer all questions below", "Provide details in Column C")
-- Decorative separators (e.g., "---", "===", "***")
+CRITICAL EXCLUSION RULES - You MUST exclude these:
+1. Short section headers (1-3 words) that organize the questionnaire into categories
+   Examples to EXCLUDE: "Platform Overview", "Competitive Positioning", "Technical Capabilities"
+2. Instructional text (e.g., "Answer all questions below", "Provide details in Column C")
+3. Decorative separators (e.g., "---", "===", "***")
 
-INCLUDE these types of rows (these ALL need answers):
-- Direct questions (e.g., "What is your platform name?", "Do you support training?")
-- Imperative prompts (e.g., "Describe your capabilities", "List your differentiators", "Explain how...")
-- Feature/capability items in a checklist format (e.g., "Automated ML pipeline orchestration", "Feature store support")
-- Any statement that expects the user to provide information, even if not phrased as a question
-- Items that would have a yes/no, description, or details as an answer
+INCLUSION RULES - You MUST include these:
+1. Direct questions (e.g., "What is your platform name?", "Do you support training?")
+2. Imperative prompts (e.g., "Describe your capabilities", "List your differentiators")
+3. Feature/capability items in checklists (e.g., "Automated ML pipeline orchestration")
+4. Any row that expects information/details/yes/no as an answer
 
-IMPORTANT RULES:
-- If it's a feature, capability, or technical item that expects a response (yes/no/details), INCLUDE it
-- If it's just organizing the questionnaire into sections without expecting an answer, EXCLUDE it
-- When in doubt, INCLUDE it (be permissive, not restrictive)
+HOW TO DECIDE:
+- If the text is just 1-3 words with no verb and looks like a category label → EXCLUDE
+- If the text asks for something, describes something to do, or is a feature to check → INCLUDE
+- Section headers like "Overview", "Background", "Positioning" are NEVER questions → EXCLUDE
 
 Respond with ONLY a JSON array of the row numbers (from the original "Row X" labels) that need answers.
-Example response format: [4, 5, 9, 10, 14]
+Example response format: [7, 9, 10, 14, 16]
 
 If none of the rows need answers, respond with: []"""
 
@@ -427,6 +421,7 @@ If none of the rows need answers, respond with: []"""
             # Parse JSON response
             import json
             try:
+                logger.info(f"LLM filtering response: {result.strip()[:500]}")  # Log first 500 chars
                 question_row_nums = json.loads(result.strip())
                 if not isinstance(question_row_nums, list):
                     logger.warning(f"LLM returned invalid format, using all rows")
@@ -434,7 +429,11 @@ If none of the rows need answers, respond with: []"""
 
                 # Filter to only rows with matching row numbers
                 filtered = [r for r in rows if r['row_num'] in question_row_nums]
+                excluded = [r for r in rows if r['row_num'] not in question_row_nums]
                 logger.info(f"LLM filtered {len(rows)} rows down to {len(filtered)} questions in sheet '{sheet_name}'")
+                if excluded:
+                    excluded_text = ", ".join([f"Row {r['row_num']}: {r['text'][:30]}" for r in excluded[:5]])
+                    logger.info(f"Excluded rows: {excluded_text}")
                 return filtered
 
             except json.JSONDecodeError as e:
@@ -447,9 +446,8 @@ If none of the rows need answers, respond with: []"""
 
     async def _ask_llm_for_filtering(self, prompt: str) -> str:
         """Ask LLM to identify which rows are actual questions."""
-        from agent_framework import ChatAgent
-        from agent_framework_azure_ai import AzureAIAgentClient
-        from azure.ai.projects.aio import AIProjectClient
+        from agent_framework import RawAgent
+        from agent_framework.azure import AzureAIClient
         from azure.identity.aio import DefaultAzureCredential
         from utils.config import config_manager
 
@@ -458,21 +456,16 @@ If none of the rows need answers, respond with: []"""
         model_deployment = config_manager.get_model_deployment()
         credential = DefaultAzureCredential()
 
-        project_client = AIProjectClient(
-            endpoint=endpoint,
-            credential=credential
-        )
-
-        azure_client = AzureAIAgentClient(
-            project_client=project_client,
+        azure_client = AzureAIClient(
+            project_endpoint=endpoint,
             credential=credential,
             model_deployment_name=model_deployment
         )
 
-        # Create a ChatAgent for this task
-        agent = ChatAgent(
-            chat_client=azure_client,
-            name="Question Filter",
+        # Create a RawAgent for this task
+        agent = RawAgent(
+            azure_client,
+            name="question-filter",
             instructions="You are a data analysis assistant that identifies actual questions in questionnaires, distinguishing them from section titles and labels."
         )
 

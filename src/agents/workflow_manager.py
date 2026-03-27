@@ -5,7 +5,7 @@ import time
 import asyncio
 from typing import Any, Dict, List, Optional, Callable
 from agent_framework import WorkflowBuilder, Workflow
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework.azure import AzureAIClient
 from utils.data_types import (
     Question, Answer, ProcessingResult, AgentStep, 
     ValidationStatus, HealthStatus, DocumentationLink
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class AgentCoordinator:
     """Orchestrates multi-agent workflow using Microsoft Agent Framework."""
     
-    def __init__(self, azure_client: AzureAIAgentClient, bing_connection_id: str,
+    def __init__(self, azure_client: AzureAIClient, bing_connection_id: str,
                  browser_automation_connection_id: str, project_client=None):
         """Initialize the agent coordinator.
 
@@ -81,10 +81,9 @@ class AgentCoordinator:
             logger.info("Building workflow...")
             # Build the sequential workflow
             self.workflow = (
-                WorkflowBuilder()
+                WorkflowBuilder(start_executor=self.question_answerer)
                 .add_edge(self.question_answerer, self.answer_checker)
                 .add_edge(self.answer_checker, self.link_checker)
-                .set_start_executor(self.question_answerer)
                 .build()
             )
             
@@ -143,24 +142,18 @@ class AgentCoordinator:
                     if reasoning_callback:
                         reasoning_callback(verbose_msg)
                     
-                    logger.info(f"🎯 Calling workflow.run_stream() with question: '{question.text}'")
-                    event_stream = self.workflow.run_stream(question)
-                    
-                    # Process streaming events to track agent execution
-                    from agent_framework import (
-                        ExecutorInvokedEvent, ExecutorCompletedEvent,
-                        AgentRunUpdateEvent, WorkflowOutputEvent
-                    )
+                    logger.info(f"🎯 Calling workflow.run() with question: '{question.text}'")
+                    event_stream = self.workflow.run(question, stream=True)
                     
                     outputs = []
                     current_agent = None
                     
                     async for event in event_stream:
                         # Debug log every event
-                        logger.debug(f"📨 Workflow event received: {type(event).__name__}")
+                        logger.debug(f"📨 Workflow event received: {event.type}")
                         
                         # Track when an executor STARTS processing
-                        if isinstance(event, ExecutorInvokedEvent):
+                        if event.type == 'executor_invoked':
                             agent_id = event.executor_id
                             logger.info(f"🎯 Executor STARTED: executor_id='{agent_id}'")
                             
@@ -176,11 +169,11 @@ class AgentCoordinator:
                                 progress_callback(agent_id, "Processing...", 0.5)
                         
                         # Track when an executor COMPLETES
-                        elif isinstance(event, ExecutorCompletedEvent):
+                        elif event.type == 'executor_completed':
                             logger.info(f"✅ Executor COMPLETED: executor_id='{event.executor_id}'")
                         
                         # Check if this is the final output event
-                        if isinstance(event, WorkflowOutputEvent):
+                        if event.type == 'output':
                             outputs.append(event.data)
                     
                     # Add verbose logging for workflow result
@@ -453,7 +446,7 @@ class AgentCoordinator:
             logger.warning(f"Error during agent cleanup: {e}")
 
 
-async def create_agent_coordinator(azure_client: AzureAIAgentClient, bing_connection_id: str,
+async def create_agent_coordinator(azure_client: AzureAIClient, bing_connection_id: str,
                                   browser_automation_connection_id: str, project_client=None) -> AgentCoordinator:
     """Create and initialize an agent coordinator.
 

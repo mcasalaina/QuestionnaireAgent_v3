@@ -54,7 +54,7 @@ class ColumnIdentifier:
         """
         # Lazy import to avoid dependency issues
         try:
-            from agent_framework import ChatAgent, ChatMessage, Role
+            from agent_framework import RawAgent, Message
         except ImportError:
             logger.warning("agent_framework not available, falling back to heuristics")
             return self._identify_with_heuristics(headers)
@@ -87,17 +87,16 @@ Use 0-based column indices. If a column cannot be identified, use null.
     
     async def _identify_with_ai_async_helper(self, headers: List[str], prompt: str) -> Dict[str, Optional[int]]:
         """Async helper for AI identification."""
-        from agent_framework import ChatAgent, ChatMessage, Role
+        from agent_framework import RawAgent, Message
         
-        agent = ChatAgent(
-            chat_client=self.azure_client,
+        agent = RawAgent(
+            self.azure_client,
             instructions="""You are a column identification expert. Analyze spreadsheet headers 
             and identify which columns contain Questions, Responses, and Documentation. 
-            Always respond with valid JSON only.""",
-            model="gpt-4o-mini"
+            Always respond with valid JSON only."""
         )
         
-        messages = [ChatMessage(role=Role.USER, content=prompt)]
+        messages = [Message(role="user", text=prompt)]
         response = await agent.invoke(messages)
         
         # Parse the AI response

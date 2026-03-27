@@ -19,13 +19,13 @@ from .config import config_manager
 from .exceptions import AuthenticationError, AzureServiceError
 
 # Set AZURE_AI_PROJECT_ENDPOINT from AZURE_OPENAI_ENDPOINT if not already set
-# The agent_framework_azure_ai SDK expects this environment variable
+# The agent_framework.azure SDK expects this environment variable
 if not os.environ.get("AZURE_AI_PROJECT_ENDPOINT"):
     endpoint = config_manager.get_azure_endpoint()
     if endpoint:
         os.environ["AZURE_AI_PROJECT_ENDPOINT"] = endpoint
 
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework.azure import AzureAIClient
 
 
 logger = logging.getLogger(__name__)
@@ -127,9 +127,10 @@ class AzureAuthenticator:
         
         # Create a temporary client to test the credential
         try:
-            test_client = AzureAIAgentClient(
+            test_client = AzureAIClient(
                 project_endpoint=config_manager.get_azure_endpoint(),
-                credential=credential
+                credential=credential,
+                model_deployment_name=config_manager.get_model_deployment()
             )
             # Test basic connectivity - this will trigger authentication
             # Note: This might fail if the endpoint is invalid, but that's a different error
@@ -139,11 +140,11 @@ class AzureAuthenticator:
             logger.debug(f"Credential verification failed: {e}")
             raise ClientAuthenticationError("Failed to verify Azure credential") from e
     
-    async def get_azure_client(self) -> AzureAIAgentClient:
+    async def get_azure_client(self) -> AzureAIClient:
         """Get authenticated Azure AI Agent client.
         
         Returns:
-            Configured AzureAIAgentClient instance.
+            Configured AzureAIClient instance.
             
         Raises:
             AuthenticationError: If authentication fails.
@@ -172,8 +173,8 @@ class AzureAuthenticator:
                 credential=credential
             )
             
-            self._client = AzureAIAgentClient(
-                project_client=self._project_client,
+            self._client = AzureAIClient(
+                project_endpoint=endpoint,
                 credential=credential,
                 model_deployment_name=model_deployment
             )
@@ -234,7 +235,7 @@ async def foundry_agent_session():
     This ensures proper resource management for Azure AI agents and threads.
     
     Yields:
-        AzureAIAgentClient: Authenticated client for agent operations.
+        AzureAIClient: Authenticated client for agent operations.
         
     Raises:
         AuthenticationError: If authentication fails.
@@ -342,13 +343,13 @@ async def verify_azure_connectivity() -> bool:
         raise AzureServiceError(f"Failed to verify Azure connectivity: {e}") from e
 
 
-async def get_azure_client() -> AzureAIAgentClient:
+async def get_azure_client() -> AzureAIClient:
     """Get authenticated Azure AI Agent client.
 
     This is a convenience function for getting the global client instance.
 
     Returns:
-        Configured AzureAIAgentClient instance.
+        Configured AzureAIClient instance.
 
     Raises:
         AuthenticationError: If authentication fails.

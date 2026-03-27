@@ -144,8 +144,8 @@ class TestColumnIdentifierAI:
         mock_agent.invoke = AsyncMock(return_value=mock_response)
         
         # Patch the imports where they are used (inside the method)
-        with patch('agent_framework.ChatAgent', return_value=mock_agent):
-            with patch('agent_framework.ChatMessage'):
+        with patch('agent_framework.RawAgent', return_value=mock_agent):
+            with patch('agent_framework.Message'):
                 with patch('agent_framework.Role'):
                     identifier = ColumnIdentifier(azure_client=mock_client)
                     headers = ['Status', 'Owner', 'Q#', 'Question', 'Response', 'Documentation']
@@ -167,8 +167,8 @@ class TestColumnIdentifierAI:
         mock_agent = Mock()
         mock_agent.invoke = AsyncMock(return_value=mock_response)
         
-        with patch('agent_framework.ChatAgent', return_value=mock_agent):
-            with patch('agent_framework.ChatMessage'):
+        with patch('agent_framework.RawAgent', return_value=mock_agent):
+            with patch('agent_framework.Message'):
                 with patch('agent_framework.Role'):
                     identifier = ColumnIdentifier(azure_client=mock_client)
                     headers = ['Status', 'Question', 'Response']

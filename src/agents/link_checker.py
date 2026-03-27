@@ -5,8 +5,8 @@ import time
 import asyncio
 import re
 from typing import Any, Dict, Optional
-from agent_framework import Executor, handler, WorkflowContext, ChatAgent, ChatMessage, Role
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework import Executor, handler, WorkflowContext, RawAgent, Message
+from agent_framework.azure import AzureAIClient
 from azure.ai.agents.models import BrowserAutomationTool
 from azure.ai.projects import AIProjectClient
 from utils.data_types import (
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class LinkCheckerExecutor(Executor):
     """Executor for the Link Checker agent in the multi-agent workflow."""
     
-    def __init__(self, azure_client: AzureAIAgentClient, browser_automation_connection_id: str,
+    def __init__(self, azure_client: AzureAIClient, browser_automation_connection_id: str,
                  project_client: Optional[AIProjectClient] = None):
         """Initialize the Link Checker executor.
 
@@ -37,7 +37,7 @@ class LinkCheckerExecutor(Executor):
         self.project_client = project_client
         self.browser_automation_connection_name = browser_automation_connection_id
         self.browser_automation_connection_id: Optional[str] = None
-        self.agent: Optional[ChatAgent] = None
+        self.agent: Optional[RawAgent] = None
     
     async def _resolve_connection_id(self) -> str:
         """Resolve the full connection ID from the connection name.
@@ -76,7 +76,7 @@ class LinkCheckerExecutor(Executor):
             logger.error(error_msg, exc_info=True)
             raise AgentExecutionError(error_msg) from e
     
-    async def _get_agent(self) -> ChatAgent:
+    async def _get_agent(self) -> RawAgent:
         """Get or create the link checker agent with Browser Automation tool."""
         if self.agent is None:
             # Resolve the full connection ID from the connection name
@@ -87,10 +87,10 @@ class LinkCheckerExecutor(Executor):
                 connection_id=connection_id
             )
             
-            self.agent = ChatAgent(
-                chat_client=self.azure_client,
-                tools=browser_tool.definitions,  # Use .definitions property for ChatAgent
-                name="Link Checker",
+            self.agent = RawAgent(
+                self.azure_client,
+                tools=browser_tool.definitions,  # Use .definitions property for RawAgent
+                name="link-checker",
                 instructions="""You are an expert Link Checker who validates documentation URLs for accuracy and relevance.
 
 Your role is to verify that provided links are accessible and contain information that is pertinent to the response content.
@@ -211,7 +211,7 @@ IMPORTANT:
                 validation_prompt = self._build_link_validation_prompt(
                     question, raw_answer, answer_sources
                 )
-                messages = [ChatMessage(role=Role.USER, text=validation_prompt)]
+                messages = [Message(role="user", text=validation_prompt)]
                 
                 # Run the agent to get link validation result using browser automation
                 response = await agent.run(messages)

@@ -452,7 +452,7 @@ def _get_sheet_data(file_path: str, sheet, columns: list) -> list:
 async def _identify_columns(workbook_data, columns: dict = None) -> ColumnSuggestions:
     """Identify likely question/answer columns using Azure AI LLM.
 
-    Uses ChatAgent to ask the LLM to identify which columns contain questions,
+    Uses RawAgent to ask the LLM to identify which columns contain questions,
     responses, and documentation based on the column headers.
     """
     if not workbook_data.sheets:
@@ -486,16 +486,16 @@ async def _identify_columns(workbook_data, columns: dict = None) -> ColumnSugges
     # Use Azure AI LLM for column identification
     try:
         from utils.azure_auth import get_azure_client
-        from agent_framework import ChatAgent
+        from agent_framework import RawAgent
         import json
         import re
 
         azure_client = await get_azure_client()
 
-        # Create a ChatAgent for column identification
-        agent = ChatAgent(
-            chat_client=azure_client,
-            name="Column Identifier",
+        # Create a RawAgent for column identification
+        agent = RawAgent(
+            azure_client,
+            name="column-identifier",
             instructions="""You are a column identification expert. Your job is to analyze spreadsheet column headers and identify which columns contain:
 1. Questions - the column with questions to be answered
 2. Responses/Answers - the column where answers should be written

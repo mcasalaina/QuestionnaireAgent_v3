@@ -4,8 +4,8 @@ import logging
 import time
 import asyncio
 from typing import Any, Dict, Optional
-from agent_framework import Executor, handler, WorkflowContext, ChatAgent, ChatMessage, Role
-from agent_framework_azure_ai import AzureAIAgentClient
+from agent_framework import Executor, handler, WorkflowContext, RawAgent, Message
+from agent_framework.azure import AzureAIClient
 from azure.core.exceptions import ResourceNotFoundError
 from utils.data_types import Question, AgentStep, AgentType, StepStatus
 from utils.logger import log_agent_step, create_span
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class QuestionAnswererExecutor(Executor):
     """Executor for the Question Answerer agent in the multi-agent workflow."""
     
-    def __init__(self, azure_client: AzureAIAgentClient, bing_connection_id: str):
+    def __init__(self, azure_client: AzureAIClient, bing_connection_id: str):
         """Initialize the Question Answerer executor.
         
         Args:
@@ -28,17 +28,17 @@ class QuestionAnswererExecutor(Executor):
         super().__init__(id="question_answerer")
         self.azure_client = azure_client
         self.bing_connection_id = bing_connection_id
-        self.agent: Optional[ChatAgent] = None
+        self.agent: Optional[RawAgent] = None
     
-    async def _get_agent(self) -> ChatAgent:
+    async def _get_agent(self) -> RawAgent:
         """Get or create the question answerer agent."""
         if self.agent is None:
             # Create the agent and track its ID for cleanup
             try:
-                # Create ChatAgent directly with Azure client
-                self.agent = ChatAgent(
-                    chat_client=self.azure_client,
-                    name="Question Answerer",
+                # Create RawAgent directly with Azure client
+                self.agent = RawAgent(
+                    self.azure_client,
+                    name="question-answerer",
                     instructions="""You are an expert Question Answerer who provides comprehensive, accurate answers to technical questions. Use web search to find current, authoritative information.
 
 REQUIREMENTS:
@@ -113,7 +113,7 @@ Provide authoritative, helpful information in plain text format only."""
                 
                 # Create the question message with context
                 question_prompt = self._build_question_prompt(question)
-                messages = [ChatMessage(role=Role.USER, text=question_prompt)]
+                messages = [Message(role="user", text=question_prompt)]
                 logger.info(f"📝 Built question prompt ({len(question_prompt)} chars), sending to agent...")
                 logger.info(f"💬 Prompt preview: {question_prompt[:200]}...")
                 
@@ -348,7 +348,7 @@ Please provide a comprehensive answer in plain text with supporting documentatio
             logger.info("Cleaning up Question Answerer agent...")
             try:
                 # The Microsoft Agent Framework handles agent lifecycle automatically
-                # when the underlying AzureAIAgentClient is closed
+                # when the underlying AzureAIClient is closed
                 logger.debug("Question Answerer agent cleanup completed")
             except Exception as e:
                 logger.warning(f"Error during Question Answerer cleanup: {e}")
